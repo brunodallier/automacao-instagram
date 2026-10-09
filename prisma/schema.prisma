@@ -1,0 +1,95 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum WorkspaceRole {
+  OWNER
+}
+
+enum SocialPlatform {
+  INSTAGRAM
+  TIKTOK
+  KWAI
+}
+
+enum SocialConnectionStatus {
+  NOT_CONNECTED
+  CONNECTED
+  EXPIRED
+  ERROR
+}
+
+model User {
+  id             String                @id @default(cuid())
+  name           String
+  email          String                @unique
+  passwordHash   String
+  sessionVersion Int                   @default(0)
+  createdAt      DateTime              @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime              @updatedAt @db.Timestamptz(3)
+  memberships    WorkspaceMembership[]
+}
+
+model Workspace {
+  id           String                @id @default(cuid())
+  name         String
+  createdAt    DateTime              @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime              @updatedAt @db.Timestamptz(3)
+  memberships  WorkspaceMembership[]
+  tags         Tag[]
+  socialAccounts SocialAccount[]
+}
+
+model WorkspaceMembership {
+  id          String        @id @default(cuid())
+  userId      String
+  workspaceId String
+  role        WorkspaceRole @default(OWNER)
+  createdAt   DateTime      @default(now()) @db.Timestamptz(3)
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, workspaceId])
+  @@index([workspaceId])
+}
+
+model Tag {
+  id             String    @id @default(cuid())
+  workspaceId    String
+  name           String    @db.VarChar(50)
+  normalizedName String    @db.VarChar(50)
+  createdAt      DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime  @updatedAt @db.Timestamptz(3)
+  workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, normalizedName])
+  @@index([workspaceId, createdAt])
+}
+
+// Somente metadados. OAuth, tokens e integrações serão definidos em outra etapa.
+model SocialAccount {
+  id          String                 @id @default(cuid())
+  workspaceId String
+  platform    SocialPlatform
+  externalId  String?
+  username    String?
+  status      SocialConnectionStatus @default(NOT_CONNECTED)
+  createdAt   DateTime               @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime               @updatedAt @db.Timestamptz(3)
+  workspace   Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, platform, externalId])
+  @@index([workspaceId])
+}
+
+// Controle persistente, compartilhado entre processos, sem armazenar e-mails.
+model LoginRateLimit {
+  key       String   @id
+  attempts  Int      @default(1)
+  expiresAt DateTime @db.Timestamptz(3)
+}
