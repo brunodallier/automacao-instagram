@@ -10,7 +10,6 @@ import {
   Clock3,
   Copy,
   LoaderCircle,
-  MessageCircle,
   MessageSquare,
   Plus,
   Save,
@@ -21,22 +20,21 @@ import {
   X,
 } from "lucide-react";
 import { AutomationMessageEditor } from "@/components/automation-message-editor";
+import { AutomationPublicReplies } from "@/components/automation-public-replies";
 import { AutomationConversationPreview } from "@/components/automation-conversation-preview";
 import {
   automationDraftSchema,
   EDITOR_LIMITS,
   emptyMessage,
+  emptyPublicReplies,
+  readPublicReplies,
   normalizeAutomationKeyword,
   readStoredStep,
   type AutomationDraft,
   type AutomationStepDraft,
   type StoredStep,
 } from "@/lib/automation-draft";
-import {
-  activationIssues,
-  characterCount,
-  utf8Bytes,
-} from "@/lib/automation-rules";
+import { activationIssues, characterCount } from "@/lib/automation-rules";
 
 type TagOption = { id: string; name: string };
 type EditorStep = AutomationStepDraft & { editorKey: string };
@@ -47,11 +45,11 @@ type SavedAutomation = {
   scope: AutomationDraft["scope"];
   keywords: { id: string; value: string }[];
   steps: StoredStep[];
+  publicReplies?: unknown;
 };
 const stepLabels = {
   SEND_DM: "Mensagem privada",
   BUTTONS: "Mensagem privada",
-  PUBLIC_REPLY: "Resposta pública",
   DELAY: "Atraso",
   ADD_TAG: "Adicionar tag",
 } as const;
@@ -62,15 +60,29 @@ const scopeLabels = {
 } as const;
 function fromAutomation(automation?: SavedAutomation): EditorState {
   if (!automation)
-    return { name: "", scope: "GLOBAL", keywords: [], steps: [] };
+    return {
+      name: "",
+      scope: "GLOBAL",
+      keywords: [],
+      steps: [],
+      publicReplies: emptyPublicReplies(),
+    };
   return {
     name: automation.name,
     scope: automation.scope,
     keywords: automation.keywords.map((keyword) => keyword.value),
-    steps: automation.steps.map((step) => ({
-      ...readStoredStep(step),
-      editorKey: step.id,
-    })),
+    publicReplies: readPublicReplies(
+      automation.publicReplies,
+      automation.steps
+        .filter((step) => step.kind === "PUBLIC_REPLY")
+        .map((step) => step.text ?? ""),
+    ),
+    steps: automation.steps.flatMap((step) => {
+      const data = readStoredStep(step);
+      return data.kind === "PUBLIC_REPLY"
+        ? []
+        : [{ ...data, editorKey: step.id }];
+    }),
   };
 }
 function toDraft(state: EditorState): AutomationDraft {
@@ -145,11 +157,9 @@ export function AutomationEditor({
     const data: AutomationStepDraft =
       kind === "SEND_DM" || kind === "BUTTONS"
         ? { kind, ...emptyMessage() }
-        : kind === "PUBLIC_REPLY"
-          ? { kind, text: "" }
-          : kind === "DELAY"
-            ? { kind, delaySeconds: null }
-            : { kind, tagId: "" };
+        : kind === "DELAY"
+          ? { kind, delaySeconds: null }
+          : { kind, tagId: "" };
     updateState({ steps: [...state.steps, { ...data, editorKey }] });
     setActiveStep(editorKey);
   }
@@ -445,9 +455,14 @@ export function AutomationEditor({
             )}
             {fieldIssue("keywords")}
           </section>
+          <AutomationPublicReplies
+            config={state.publicReplies}
+            showErrors={showErrors}
+            onChange={(publicReplies) => updateState({ publicReplies })}
+          />
           <section className="card editor-section">
             <div className="editor-section-heading">
-              <span className="editor-step-number">3</span>
+              <span className="editor-step-number">4</span>
               <div>
                 <h2>Monte a conversa</h2>
                 <p>Adicione etapas na ordem em que devem acontecer.</p>
@@ -510,28 +525,6 @@ export function AutomationEditor({
                               updateStep(step.editorKey, message)
                             }
                           />
-                        ) : step.kind === "PUBLIC_REPLY" ? (
-                          <>
-                            <label htmlFor={"step-text-" + index}>
-                              Resposta pública
-                            </label>
-                            <textarea
-                              id={"step-text-" + index}
-                              value={step.text}
-                              onChange={(event) =>
-                                updateStep(step.editorKey, {
-                                  text: event.target.value,
-                                })
-                              }
-                              placeholder="Escreva a resposta pública"
-                              maxLength={8000}
-                            />
-                            <p className="message-count">
-                              {characterCount(step.text)} caracteres ·{" "}
-                              {utf8Bytes(step.text)} bytes UTF-8
-                            </p>
-                            {fieldIssue("steps." + index + ".text")}
-                          </>
                         ) : step.kind === "DELAY" ? (
                           <>
                             <label htmlFor={"step-delay-" + index}>
@@ -669,13 +662,6 @@ export function AutomationEditor({
                 onClick={() => addStep("DELAY")}
               >
                 <Clock3 size={15} /> Atraso
-              </button>
-              <button
-                type="button"
-                disabled={state.steps.length >= EDITOR_LIMITS.steps}
-                onClick={() => addStep("PUBLIC_REPLY")}
-              >
-                <MessageCircle size={15} /> Resposta pública
               </button>
             </div>
           </section>

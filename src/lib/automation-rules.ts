@@ -3,6 +3,7 @@ import {
   type AutomationDraft,
   type MessageDraft,
 } from "@/lib/automation-draft";
+import { publicReplyIssues } from "@/lib/public-replies";
 
 // Verified against Meta's Send API and button-template documentation.
 // Button titles use a conservative local policy pending Instagram integration.
@@ -91,7 +92,7 @@ export function messageIssues(
 }
 
 export function activationIssues(draft: AutomationDraft): DraftIssue[] {
-  const issues: DraftIssue[] = [];
+  const issues: DraftIssue[] = publicReplyIssues(draft.publicReplies);
   if (!draft.name.trim())
     issues.push({ path: "name", message: "Defina um nome antes de ativar." });
   if (!draft.keywords.length)
@@ -116,18 +117,6 @@ export function activationIssues(draft: AutomationDraft): DraftIssue[] {
             "Esta DM subsequente deve aguardar uma resposta elegível do destinatário e a janela de 24 horas. Vincule-a a um botão de continuação quando possível.",
         });
       initial = false;
-    } else if (step.kind === "PUBLIC_REPLY") {
-      if (!step.text.trim())
-        issues.push({
-          path: `${path}.text`,
-          message: "Escreva a resposta pública antes de ativar.",
-        });
-      if (characterCount(step.text) > 500)
-        issues.push({
-          path: `${path}.text`,
-          message:
-            "Use até 500 caracteres na resposta pública (limite do editor).",
-        });
     } else if (step.kind === "ADD_TAG" && !step.tagId)
       issues.push({
         path: `${path}.tagId`,

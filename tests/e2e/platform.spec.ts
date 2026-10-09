@@ -50,6 +50,330 @@ async function login(page: Page) {
   await expect(page).toHaveURL(/\/painel$/);
 }
 
+test("organiza quatro etapas, edita respostas públicas e simula somente falha definitiva", async ({
+  page,
+}) => {
+  await login(page);
+  await page.goto("/automacoes/nova");
+  await expect(page.locator(".editor-main h2")).toHaveText([
+    "Defina a automação",
+    "Escolha as palavras-chave",
+    "Configure as respostas públicas",
+    "Monte a conversa",
+  ]);
+  await expect(page.locator(".editor-step-number")).toHaveText([
+    "1",
+    "2",
+    "3",
+    "4",
+  ]);
+  await expect(
+    page
+      .locator(".step-type-picker")
+      .getByRole("button", { name: "Resposta pública" }),
+  ).toHaveCount(0);
+  const publicSection = page.getByRole("region", {
+    name: "Configure as respostas públicas",
+    exact: true,
+  });
+  await expect(
+    publicSection.locator(".public-reply-variations textarea"),
+  ).toHaveCount(5);
+  for (let i = 1; i <= 5; i++) {
+    await expect(
+      publicSection.getByLabel(`Resposta pública ${i}`, { exact: true }),
+    ).toHaveValue("");
+    await publicSection
+      .getByLabel(`Resposta pública ${i}`, { exact: true })
+      .fill(`Minha resposta ${i}`);
+  }
+  await publicSection
+    .getByLabel("Ativar respostas públicas automáticas", { exact: true })
+    .check();
+  await publicSection
+    .getByRole("button", { name: "Adicionar variação" })
+    .click();
+  await publicSection
+    .getByLabel("Resposta pública 6", { exact: true })
+    .fill("Minha sexta resposta");
+  await publicSection
+    .getByLabel("Ativar resposta alternativa para falha definitiva da DM", {
+      exact: true,
+    })
+    .check();
+  await publicSection
+    .getByLabel("Resposta pública alternativa", { exact: true })
+    .fill("Minha alternativa de falha");
+  await page.getByLabel("Adicionar palavra-chave").fill("quero");
+  await page.getByRole("button", { name: "Adicionar", exact: true }).click();
+  await page.getByRole("button", { name: "DM", exact: true }).click();
+  await page
+    .getByLabel("Mensagem da DM", { exact: true })
+    .fill("Minha DM preservada");
+  await page.getByRole("button", { name: "Testar rascunho" }).click();
+  await page.getByLabel("Comentário fictício").fill("quero");
+  const preview = page.getByLabel("Prévia das respostas públicas", {
+    exact: true,
+  });
+  await page.getByRole("button", { name: "Simular comentário" }).click();
+  await expect(
+    preview.getByText("Minha resposta 1", { exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Simular comentário" }).click();
+  await expect(
+    preview.getByText("Minha resposta 2", { exact: true }),
+  ).toBeVisible();
+  for (const outcome of ["API_ACCEPTED", "DELAYED", "TEMPORARY_FAILURE"]) {
+    await page.getByLabel("Situação fictícia da DM").selectOption(outcome);
+    await expect(
+      preview.getByText("Minha alternativa de falha", { exact: true }),
+    ).toHaveCount(0);
+  }
+  await page
+    .getByLabel("Situação fictícia da DM")
+    .selectOption("DEFINITIVE_FAILURE");
+  await expect(
+    preview.getByText("Minha alternativa de falha", { exact: true }),
+  ).toBeVisible();
+  await publicSection
+    .getByLabel("Ativar respostas públicas automáticas", { exact: true })
+    .uncheck();
+  await expect(
+    preview.getByText("Minha alternativa de falha", { exact: true }),
+  ).toBeVisible();
+  await publicSection
+    .getByLabel("Ativar resposta alternativa para falha definitiva da DM", {
+      exact: true,
+    })
+    .uncheck();
+  await expect(preview).toHaveCount(0);
+  await page.getByRole("button", { name: "Salvar rascunho" }).click();
+  await expect(page.locator(".editor-feedback")).toContainText(
+    "Rascunho salvo",
+  );
+  await page.reload();
+  await expect(
+    publicSection.getByLabel("Ativar respostas públicas automáticas", {
+      exact: true,
+    }),
+  ).not.toBeChecked();
+  await expect(
+    publicSection.getByLabel(
+      "Ativar resposta alternativa para falha definitiva da DM",
+      { exact: true },
+    ),
+  ).not.toBeChecked();
+  for (let i = 1; i <= 5; i++)
+    await expect(
+      publicSection.getByLabel(`Resposta pública ${i}`, { exact: true }),
+    ).toHaveValue(`Minha resposta ${i}`);
+  await expect(
+    publicSection.getByLabel("Resposta pública 6", { exact: true }),
+  ).toHaveValue("Minha sexta resposta");
+  await expect(
+    publicSection.getByLabel("Resposta pública alternativa", { exact: true }),
+  ).toHaveValue("Minha alternativa de falha");
+  await page.locator(".step-summary").click();
+  await expect(page.getByLabel("Mensagem da DM", { exact: true })).toHaveValue(
+    "Minha DM preservada",
+  );
+  await publicSection
+    .getByLabel("Ativar respostas públicas automáticas", { exact: true })
+    .check();
+  await publicSection
+    .getByLabel("Resposta pública 1", { exact: true })
+    .fill("x".repeat(501));
+  await expect(publicSection.locator(".field-error")).toContainText(
+    "500 caracteres",
+  );
+  await publicSection
+    .getByLabel("Resposta pública 1", { exact: true })
+    .fill("Minha resposta editada");
+  await page.getByRole("button", { name: "Salvar rascunho" }).click();
+  await expect(page.locator(".editor-feedback")).toContainText(
+    "Rascunho salvo",
+  );
+  await page.reload();
+  await expect(
+    publicSection.getByLabel("Ativar respostas públicas automáticas", {
+      exact: true,
+    }),
+  ).toBeChecked();
+  await expect(
+    publicSection.getByLabel("Resposta pública 1", { exact: true }),
+  ).toHaveValue("Minha resposta editada");
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.screenshot({
+    path: "test-results/public-replies-desktop.png",
+    fullPage: true,
+  });
+});
+
+test("reabre resposta pública antiga e rascunho incompleto na nova etapa", async ({
+  page,
+}) => {
+  const old = await client.automation.create({
+    data: {
+      workspaceId,
+      name: "Legado público",
+      steps: {
+        create: [
+          {
+            position: 0,
+            kind: "PUBLIC_REPLY",
+            text: "Resposta pública personalizada antiga",
+          },
+          {
+            position: 1,
+            kind: "BUTTONS",
+            text: "DM antiga",
+            buttons: [
+              { label: "Site antigo", url: "https://example.com/antigo" },
+            ],
+          },
+        ],
+      },
+    },
+  });
+  await login(page);
+  await page.goto(`/automacoes/${old.id}`);
+  await expect(
+    page.getByLabel("Resposta pública 1", { exact: true }),
+  ).toHaveValue("Resposta pública personalizada antiga");
+  await expect(page.locator(".editor-step")).toHaveCount(1);
+  await page.locator(".step-summary").click();
+  await expect(page.getByLabel("Título do botão", { exact: true })).toHaveValue(
+    "Site antigo",
+  );
+  await page
+    .getByLabel("Ativar resposta alternativa para falha definitiva da DM", {
+      exact: true,
+    })
+    .check();
+  await page
+    .getByLabel("Resposta pública alternativa", { exact: true })
+    .fill("");
+  await page.getByRole("button", { name: "Salvar rascunho" }).click();
+  await expect(page.locator(".editor-feedback")).toContainText(
+    "Rascunho salvo",
+  );
+  await page.reload();
+  await expect(
+    page.getByLabel("Resposta pública 1", { exact: true }),
+  ).toHaveValue("Resposta pública personalizada antiga");
+  await expect(
+    page.getByLabel("Ativar resposta alternativa para falha definitiva da DM", {
+      exact: true,
+    }),
+  ).toBeChecked();
+  await expect(
+    page.getByLabel("Resposta pública alternativa", { exact: true }),
+  ).toHaveValue("");
+  const activation = await page.request.post(
+    `/api/automacoes/${old.id}/ativar`,
+    { headers: { Origin: "http://localhost:3100" } },
+  );
+  expect(activation.status()).toBe(400);
+  expect((await activation.json()).issues).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ path: "publicReplies.fallback.text" }),
+    ]),
+  );
+});
+
+test("compacta e recolhe botões completos mantendo ações e edição no celular", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await login(page);
+  await page.goto("/automacoes/nova");
+  await page.getByRole("button", { name: "DM", exact: true }).click();
+  await page
+    .getByLabel("Mensagem da DM", { exact: true })
+    .fill("Minha conversa");
+  await page
+    .getByRole("button", { name: "Adicionar botão", exact: true })
+    .click();
+  const cards = page
+    .locator(".message-button-fields")
+    .first()
+    .locator(":scope > .message-button-card");
+  await expect(
+    cards.nth(0).getByRole("button", { name: "Recolher botão 1" }),
+  ).toBeDisabled();
+  await cards.nth(0).getByLabel("Título do botão").fill("Meu site");
+  await cards.nth(0).getByLabel("URL do site").fill("https://example.com/site");
+  const heights = await cards
+    .nth(0)
+    .locator("input, select")
+    .evaluateAll((elements) =>
+      elements.map((element) => element.getBoundingClientRect().height),
+    );
+  expect(heights).toEqual([36, 36, 36]);
+  const expanded = (await cards.nth(0).boundingBox())!.height;
+  await cards.nth(0).getByRole("button", { name: "Recolher botão 1" }).click();
+  await expect(cards.nth(0).getByLabel("Título do botão")).toHaveCount(0);
+  await expect(cards.nth(0)).toHaveText("Meu siteAbrir site externo");
+  expect((await cards.nth(0).boundingBox())!.height).toBeLessThan(expanded / 2);
+  const simulator = page.getByRole("region", { name: "Simulador de conversa" });
+  await simulator
+    .getByRole("button", { name: "Meu site", exact: true })
+    .click();
+  await expect(simulator.locator(".simulated-url")).toContainText(
+    "https://example.com/site",
+  );
+  await page
+    .getByRole("button", { name: "Adicionar botão", exact: true })
+    .click();
+  await cards
+    .nth(1)
+    .getByLabel("Título do botão", { exact: true })
+    .fill("Continuar");
+  await cards
+    .nth(1)
+    .getByLabel("O que acontece ao clicar?", { exact: true })
+    .selectOption("NEXT_MESSAGE");
+  await cards
+    .nth(1)
+    .getByLabel("Texto da próxima mensagem", { exact: true })
+    .fill("Minha continuação");
+  await cards
+    .nth(1)
+    .getByRole("button", { name: "Recolher botão 2", exact: true })
+    .click();
+  await expect(cards.nth(1)).toHaveText("ContinuarEnviar próxima mensagem");
+  await simulator
+    .getByRole("button", { name: "Continuar", exact: true })
+    .click();
+  await expect(
+    simulator.getByText("Minha continuação", { exact: true }),
+  ).toBeVisible();
+  await cards.nth(0).getByRole("button", { name: "Expandir botão 1" }).click();
+  await cards.nth(0).getByLabel("Título do botão").fill("Site editado");
+  await cards.nth(0).getByRole("button", { name: "Remover botão 1" }).click();
+  await expect(cards.nth(0)).toHaveText("ContinuarEnviar próxima mensagem");
+  await cards.nth(0).getByRole("button", { name: "Expandir botão 1" }).click();
+  await expect(
+    cards.nth(0).getByLabel("Texto da próxima mensagem", { exact: true }),
+  ).toHaveValue("Minha continuação");
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+  await page.locator(".message-button-card").first().scrollIntoViewIfNeeded();
+  await page.screenshot({ path: "test-results/compact-buttons-mobile.png" });
+  await page.getByRole("button", { name: "Salvar rascunho" }).click();
+  await expect(page.locator(".editor-feedback")).toContainText(
+    "Rascunho salvo",
+  );
+  await page.reload();
+  await page.locator(".step-summary").click();
+  await expect(
+    page.getByLabel("Texto da próxima mensagem", { exact: true }),
+  ).toHaveValue("Minha continuação");
+});
+
 test("protege todas as páginas e APIs sem sessão", async ({
   page,
   request,
@@ -300,7 +624,7 @@ test("cria um rascunho no editor sequencial e revisa a prévia", async ({
   await page.goto("/automacoes/nova");
   await page.getByLabel("Nome da automação").fill("Catálogo por comentário");
   await page.getByLabel("Adicionar palavra-chave").fill("quero");
-  await page.getByRole("button", { name: "Adicionar" }).click();
+  await page.getByRole("button", { name: "Adicionar", exact: true }).click();
   await page.getByRole("button", { name: "DM", exact: true }).click();
   await page.getByLabel("Mensagem da DM").fill("Oi! Aqui está o catálogo.");
   await page.getByRole("button", { name: "Salvar rascunho" }).click();
@@ -406,7 +730,7 @@ test("personaliza botões, continuações e prévia interativa sem salvar", asyn
     .fill("Continuar");
   await buttons
     .nth(1)
-    .getByLabel("O que acontece quando alguém clicar?", { exact: true })
+    .getByLabel("O que acontece ao clicar?", { exact: true })
     .selectOption("NEXT_MESSAGE");
   await expect(buttons.nth(1).getByLabel("URL do site")).toHaveCount(0);
   await page
@@ -423,7 +747,7 @@ test("personaliza botões, continuações e prévia interativa sem salvar", asyn
     .getByLabel("Título do botão", { exact: true })
     .fill("Mais detalhes");
   await child
-    .getByLabel("O que acontece quando alguém clicar?", { exact: true })
+    .getByLabel("O que acontece ao clicar?", { exact: true })
     .selectOption("NEXT_MESSAGE");
   await page
     .getByLabel("Texto da próxima mensagem", { exact: true })
@@ -506,14 +830,12 @@ test("salva URL incompleta, preserva continuação ao trocar ação e reabrir", 
     page.locator(".field-error").filter({ hasText: "URL HTTPS" }),
   ).toBeVisible();
   await page
-    .getByLabel("O que acontece quando alguém clicar?")
+    .getByLabel("O que acontece ao clicar?")
     .selectOption("NEXT_MESSAGE");
   await page
     .getByLabel("Texto da próxima mensagem", { exact: true })
     .fill("Continuação personalizada");
-  await page
-    .getByLabel("O que acontece quando alguém clicar?")
-    .selectOption("OPEN_URL");
+  await page.getByLabel("O que acontece ao clicar?").selectOption("OPEN_URL");
   await expect(page.getByLabel("URL do site")).toHaveValue("https://");
   await page.getByRole("button", { name: "Salvar rascunho" }).click();
   await expect(page.locator(".editor-feedback")).toContainText(
@@ -523,7 +845,7 @@ test("salva URL incompleta, preserva continuação ao trocar ação e reabrir", 
   await page.locator(".step-summary").click();
   await expect(page.getByLabel("URL do site")).toHaveValue("https://");
   await page
-    .getByLabel("O que acontece quando alguém clicar?")
+    .getByLabel("O que acontece ao clicar?")
     .selectOption("NEXT_MESSAGE");
   await expect(
     page.getByLabel("Texto da próxima mensagem", { exact: true }),

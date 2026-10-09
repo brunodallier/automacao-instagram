@@ -2,7 +2,7 @@
 
 Base de uma plataforma privada de automações para Instagram, com interface em português do Brasil. Esta entrega cobre a fundação segura e o editor da Etapa 2.
 
-O proprietário pode entrar com segurança, organizar tags e criar rascunhos de automações com persistência em PostgreSQL. O editor sequencial reúne escopo, palavras-chave, mensagens com botões próprios, continuações, tags, atrasos e respostas públicas. A prévia interativa atualiza durante a edição e funciona antes de salvar. A integração Meta, OAuth, webhooks, filas e execução real continuam fora desta etapa.
+O proprietário pode entrar com segurança, organizar tags e criar rascunhos de automações com persistência em PostgreSQL. O editor tem quatro etapas de configuração: definição e escopo, palavras-chave, respostas públicas e conversa privada. As respostas públicas têm cinco campos inicialmente vazios, variações adicionais em rotação e uma alternativa opcional para falha definitiva da DM. Os botões da conversa têm configuração compacta e podem ser recolhidos quando completos. A prévia interativa atualiza durante a edição e funciona antes de salvar. A integração Meta, OAuth, webhooks, filas e execução real continuam fora desta etapa.
 
 Repositório: [brunodallier/automacao-instagram](https://github.com/brunodallier/automacao-instagram).
 
@@ -168,7 +168,7 @@ npm run build
 
 Os testes unitários cobrem validação de tags, normalização, limites, entradas extras, dados de login e hashing/verificação de senha.
 
-O editor acrescenta testes de rascunhos incompletos, contagem UTF-8, URLs HTTPS, continuações, compatibilidade antiga, janela de mensagens, validação para ativação e ausência de efeitos reais durante a simulação.
+O editor acrescenta testes de rascunhos incompletos, contagem UTF-8, URLs HTTPS, continuações, compatibilidade antiga, janela de mensagens, validação para ativação e ausência de efeitos reais durante a simulação. A revisão de organização cobre a migração aditiva das respostas públicas, os controles independentes de ativação e alternativa, a rotação das variações e os botões compactos/recolhidos no celular.
 
 Para integração, crie um banco separado:
 
@@ -235,6 +235,10 @@ compose.yaml                PostgreSQL para desenvolvimento
 As capacidades verificadas na documentação oficial e as pendências práticas estão em [docs/INSTAGRAM-MENSAGENS.md](docs/INSTAGRAM-MENSAGENS.md). O endpoint autenticado `POST /api/automacoes/:id/ativar` revisa o rascunho: retorna 400 para configurações incompletas/incompatíveis e 409 para fluxos completos enquanto a integração não estiver implementada. Ele mantém o status `DRAFT` e não envia mensagens.
 
 Para testar no navegador: abra Automações → Nova automação, adicione uma DM e escreva seu conteúdo. Use **Adicionar botão** dentro da mensagem e escolha uma ação. A prévia acompanha a edição; **Testar rascunho** libera um comentário fictício e a revisão das pendências. **Salvar rascunho** funciona mesmo antes de concluir os campos. Reabra pela listagem para continuar a edição.
+
+Na **Etapa 3 — Configure as respostas públicas**, preencha as variações desejadas e habilite as respostas automáticas. Campos vazios não participam da rotação. A resposta alternativa tem controle próprio e só pode ser escolhida com erro definitivo identificado que justifique seu uso. No simulador, selecione explicitamente essa situação; atraso, falha temporária ou aceitação da API não selecionam a alternativa. A ordem das quatro etapas organiza a configuração e não estabelece a ordem de envio entre resposta pública e DM.
+
+A migration `202610091700_public_reply_config` adiciona `Automation.publicReplies` e copia os antigos blocos públicos, preservando texto, ordem e campos vazios. Não exclui nem modifica os registros antigos. Eles deixam de aparecer na conversa privada e são consolidados na configuração própria ao salvar o rascunho. Clientes antigos que omitem a nova configuração mantêm as respostas existentes. Faça backup e use `npm run db:migrate` ao atualizar outra instalação; não resete o banco.
 
 A próxima etapa deve conectar a conta Instagram pela Meta, sincronizar Reels e habilitar a seleção de Reels específicos. Depois disso, serão definidos OAuth, tokens, webhooks, processamento, limites oficiais de envio, ativação, filas e recuperação de falhas.
 

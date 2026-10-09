@@ -5,6 +5,7 @@ export const EDITOR_LIMITS = {
   messages: 60,
   depth: 8,
   buttons: 3,
+  publicReplies: 100,
 } as const;
 
 // A content discriminator keeps future media formats separate from text.
@@ -26,6 +27,49 @@ export function emptyMessage(): MessageDraft {
 }
 export function emptyButton(): MessageButton {
   return { label: "", action: "OPEN_URL", url: "", nextMessage: null };
+}
+
+export function emptyPublicReplies() {
+  return {
+    enabled: false,
+    strategy: "ROTATING" as const,
+    variations: Array<string>(5).fill(""),
+    fallback: { enabled: false, text: "" },
+  };
+}
+export const publicReplyConfigSchema = z
+  .object({
+    enabled: z.boolean(),
+    strategy: z.literal("ROTATING"),
+    variations: z
+      .array(z.string().max(8000))
+      .max(EDITOR_LIMITS.publicReplies)
+      .transform((values) => [
+        ...values,
+        ...Array<string>(Math.max(0, 5 - values.length)).fill(""),
+      ]),
+    fallback: z
+      .object({ enabled: z.boolean(), text: z.string().max(8000) })
+      .strict(),
+  })
+  .strict();
+export type PublicReplyConfig = z.infer<typeof publicReplyConfigSchema>;
+
+// Legacy public blocks stay readable, independently of the private conversation.
+export function readPublicReplies(
+  value: unknown,
+  legacyTexts: string[] = [],
+): PublicReplyConfig {
+  if (value !== null && value !== undefined)
+    return publicReplyConfigSchema.parse(value);
+  return {
+    ...emptyPublicReplies(),
+    enabled: legacyTexts.length > 0,
+    variations: [
+      ...legacyTexts,
+      ...Array<string>(Math.max(0, 5 - legacyTexts.length)).fill(""),
+    ],
+  };
 }
 
 const messageFields = {
@@ -111,6 +155,7 @@ const draftObjectSchema = z
       )
       .max(10, "Use no máximo 10 palavras-chave."),
     steps: z.array(automationStepSchema).max(EDITOR_LIMITS.steps),
+    publicReplies: publicReplyConfigSchema.optional(),
   })
   .strict()
   .superRefine((value, context) => {
@@ -121,7 +166,17 @@ const draftObjectSchema = z
         path: ["keywords"],
         message: "As palavras-chave não podem se repetir.",
       });
-  });
+  })
+  .transform((value) => ({
+    ...value,
+    publicReplies: readPublicReplies(
+      value.publicReplies,
+      value.steps.flatMap((step) =>
+        step.kind === "PUBLIC_REPLY" ? [step.text] : [],
+      ),
+    ),
+    steps: value.steps.filter((step) => step.kind !== "PUBLIC_REPLY"),
+  }));
 
 // Bound the tree before invoking recursive Zod parsing, including malicious inputs.
 function boundedTree(value: unknown) {
@@ -177,14 +232,16 @@ export type AutomationStepDraft = AutomationDraft["steps"][number];
 export type StoredStep = {
   id: string;
   position: number;
-  kind: AutomationStepDraft["kind"];
+  kind: z.infer<typeof automationStepSchema>["kind"];
   text: string | null;
   delaySeconds: number | null;
   tagId: string | null;
   buttons: unknown;
 };
 
-export function readStoredStep(step: StoredStep): AutomationStepDraft {
+export function readStoredStep(
+  step: StoredStep,
+): z.infer<typeof automationStepSchema> {
   if (step.kind === "SEND_DM" || step.kind === "BUTTONS") {
     // Defaults enrich old {label,url} buttons without changing their content.
     const buttons = z.array(messageButtonSchema).parse(step.buttons ?? []);

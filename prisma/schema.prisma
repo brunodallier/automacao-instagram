@@ -99,6 +99,7 @@ model Automation {
   workspaceId    String
   name           String             @db.VarChar(80)
   nameIsProvisional Boolean         @default(false)
+  publicReplies     Json?
   status         AutomationStatus   @default(DRAFT)
   scope          AutomationScope     @default(GLOBAL)
   lastExecutedAt DateTime?          @db.Timestamptz(3)

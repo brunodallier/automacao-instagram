@@ -3,6 +3,7 @@ import { automationService } from "@/lib/automations";
 import {
   emptyButton,
   emptyMessage,
+  emptyPublicReplies,
   readStoredStep,
 } from "@/lib/automation-draft";
 import { testClient, fixtureName } from "../helpers/database";
@@ -46,6 +47,139 @@ const draft = () => ({
   ],
 });
 describe("rascunhos de automação", () => {
+  it("persiste cinco respostas editáveis, variações adicionais e alternativa independente", async () => {
+    const publicReplies = {
+      ...emptyPublicReplies(),
+      enabled: true,
+      variations: ["Uma", "Duas", "Três", "Quatro", "Cinco", ""],
+      fallback: { enabled: true, text: "Minha alternativa" },
+    };
+    const saved = await service.create(workspaceId, {
+      ...draft(),
+      publicReplies,
+    });
+    expect((await service.get(workspaceId, saved.id)).publicReplies).toEqual(
+      publicReplies,
+    );
+    const updated = {
+      ...publicReplies,
+      enabled: false,
+      variations: [...publicReplies.variations.slice(0, 5), "Seis"],
+      fallback: { enabled: false, text: publicReplies.fallback.text },
+    };
+    await service.update(workspaceId, saved.id, {
+      ...draft(),
+      publicReplies: updated,
+    });
+    expect((await service.get(workspaceId, saved.id)).publicReplies).toEqual(
+      updated,
+    );
+    await service.update(workspaceId, saved.id, {
+      ...draft(),
+      steps: [
+        ...draft().steps,
+        { kind: "PUBLIC_REPLY", text: "Texto editado pelo cliente antigo" },
+      ],
+    });
+    const editedByLegacy = {
+      ...updated,
+      variations: [
+        "Texto editado pelo cliente antigo",
+        ...updated.variations.slice(1),
+      ],
+    };
+    expect((await service.get(workspaceId, saved.id)).publicReplies).toEqual(
+      editedByLegacy,
+    );
+    // Legacy clients cannot erase the new configuration by omitting it.
+    await service.update(workspaceId, saved.id, {
+      ...draft(),
+      name: "Cliente antigo",
+    });
+    expect((await service.get(workspaceId, saved.id)).publicReplies).toEqual(
+      editedByLegacy,
+    );
+  });
+  it("salva respostas incompletas e valida ativação conforme os controles", async () => {
+    const input = {
+      ...draft(),
+      steps: [{ kind: "SEND_DM", text: "DM" }],
+      publicReplies: {
+        ...emptyPublicReplies(),
+        enabled: true,
+        fallback: { enabled: true, text: "" },
+      },
+    };
+    const saved = await service.create(workspaceId, input);
+    await expect(service.activate(workspaceId, saved.id)).rejects.toMatchObject(
+      {
+        status: 400,
+        issues: expect.arrayContaining([
+          expect.objectContaining({ path: "publicReplies.variations" }),
+          expect.objectContaining({ path: "publicReplies.fallback.text" }),
+        ]),
+      },
+    );
+    await service.update(workspaceId, saved.id, {
+      ...input,
+      publicReplies: emptyPublicReplies(),
+    });
+    await expect(service.activate(workspaceId, saved.id)).rejects.toMatchObject(
+      { status: 409 },
+    );
+  });
+  it("abre e salva respostas públicas antigas sem misturá-las com as DMs", async () => {
+    const old = await client.automation.create({
+      data: {
+        workspaceId,
+        name: "Públicas antigas",
+        steps: {
+          create: [
+            {
+              position: 0,
+              kind: "PUBLIC_REPLY",
+              text: "  Minha resposta antiga  ",
+            },
+            { position: 1, kind: "SEND_DM", text: "DM antiga", buttons: [] },
+            { position: 2, kind: "PUBLIC_REPLY", text: "" },
+          ],
+        },
+      },
+    });
+    const loaded = await service.get(workspaceId, old.id);
+    expect(loaded.publicReplies.variations).toEqual([
+      "  Minha resposta antiga  ",
+      "",
+      "",
+      "",
+      "",
+    ]);
+    expect(loaded.steps.map((step) => step.kind)).toEqual(["SEND_DM"]);
+    expect(
+      await client.automationStep.count({ where: { automationId: old.id } }),
+    ).toBe(3);
+    await service.update(workspaceId, old.id, {
+      name: loaded.name,
+      scope: loaded.scope,
+      keywords: [],
+      steps: loaded.steps.map(readStoredStep),
+    });
+    const reopened = await service.get(workspaceId, old.id);
+    expect(reopened.publicReplies).toEqual(loaded.publicReplies);
+    expect(reopened.steps.map(readStoredStep)).toEqual(
+      loaded.steps.map(readStoredStep),
+    );
+    await service.update(workspaceId, old.id, {
+      name: loaded.name,
+      scope: loaded.scope,
+      keywords: [],
+      steps: reopened.steps.map(readStoredStep),
+      publicReplies: { ...reopened.publicReplies, enabled: false },
+    });
+    expect((await service.get(workspaceId, old.id)).publicReplies.enabled).toBe(
+      false,
+    );
+  });
   it("persiste gatilhos e etapas em sequência", async () => {
     const saved = await service.create(workspaceId, draft());
     expect(saved.status).toBe("DRAFT");

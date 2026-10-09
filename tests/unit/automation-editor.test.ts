@@ -3,6 +3,7 @@ import {
   automationDraftSchema,
   emptyButton,
   emptyMessage,
+  emptyPublicReplies,
   readStoredStep,
   type AutomationDraft,
 } from "@/lib/automation-draft";
@@ -20,6 +21,7 @@ function draft(): AutomationDraft {
     name: "Meu fluxo",
     scope: "GLOBAL",
     keywords: ["quero"],
+    publicReplies: emptyPublicReplies(),
     steps: [
       { kind: "SEND_DM", ...emptyMessage(), text: "Conteúdo personalizado" },
     ],

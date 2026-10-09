@@ -1,6 +1,7 @@
 "use client";
 
-import { Copy, Plus, Trash2, X } from "lucide-react";
+import { useState } from "react";
+import { ChevronDown, ChevronUp, Copy, Plus, Trash2, X } from "lucide-react";
 import {
   EDITOR_LIMITS,
   emptyButton,
@@ -29,6 +30,9 @@ export function AutomationMessageEditor({
   showErrors: boolean;
   depth?: number;
 }) {
+  const [collapsedButtons, setCollapsedButtons] = useState<Set<number>>(
+    () => new Set(),
+  );
   const id = path.replaceAll(".", "-");
   const issues = messageIssues(message, path, initial);
   function error(field: string, filled = true) {
@@ -92,141 +96,201 @@ export function AutomationMessageEditor({
       <div className="message-button-fields">
         {message.buttons.map((button, index) => {
           const buttonId = `${id}-button-${index}`;
+          const complete = !issues.some((issue) =>
+            issue.path.startsWith(`${path}.buttons.${index}.`),
+          );
+          const collapsed = complete && collapsedButtons.has(index);
           return (
             <div className="message-button-card" key={buttonId}>
-              <div className="message-button-heading">
-                <strong>Botão {index + 1}</strong>
+              {collapsed ? (
                 <button
                   type="button"
-                  className="icon-button danger-icon"
-                  aria-label={`Remover botão ${index + 1}`}
+                  className="message-button-collapsed"
+                  aria-label={`Expandir botão ${index + 1}`}
+                  aria-expanded={false}
                   onClick={() =>
-                    onChange({
-                      ...message,
-                      buttons: message.buttons.filter((_, i) => i !== index),
-                    })
+                    setCollapsedButtons(
+                      (current) =>
+                        new Set([...current].filter((i) => i !== index)),
+                    )
                   }
                 >
-                  <X size={15} />
+                  <span>
+                    {button.label}
+                    <small>
+                      {button.action === "OPEN_URL"
+                        ? "Abrir site externo"
+                        : "Enviar próxima mensagem"}
+                    </small>
+                  </span>
+                  <ChevronDown size={15} />
                 </button>
-              </div>
-              <label htmlFor={`${buttonId}-label`}>Título do botão</label>
-              <input
-                id={`${buttonId}-label`}
-                value={button.label}
-                maxLength={200}
-                placeholder="Escreva o título"
-                onChange={(event) =>
-                  updateButton(index, { label: event.target.value })
-                }
-              />
-              <span className="button-title-count">
-                {characterCount(button.label)}/20 caracteres
-              </span>
-              {error(`buttons.${index}.label`, !!button.label)}
-              <label htmlFor={`${buttonId}-action`}>
-                O que acontece quando alguém clicar?
-              </label>
-              <select
-                id={`${buttonId}-action`}
-                value={button.action}
-                onChange={(event) => {
-                  const action = event.target.value as MessageButton["action"];
-                  // Keep both branches when changing action so an edit never discards user content.
-                  updateButton(index, {
-                    action,
-                    ...(action === "NEXT_MESSAGE" && !button.nextMessage
-                      ? { nextMessage: emptyMessage() }
-                      : {}),
-                  });
-                }}
-              >
-                <option value="OPEN_URL">Abrir site externo</option>
-                <option value="NEXT_MESSAGE">Enviar próxima mensagem</option>
-              </select>
-              {button.action === "OPEN_URL" ? (
-                <>
-                  <label htmlFor={`${buttonId}-url`}>URL do site</label>
-                  <input
-                    id={`${buttonId}-url`}
-                    type="text"
-                    inputMode="url"
-                    value={button.url}
-                    placeholder="https://"
-                    maxLength={2000}
-                    onChange={(event) =>
-                      updateButton(index, { url: event.target.value })
-                    }
-                  />
-                  {error(`buttons.${index}.url`, !!button.url)}
-                  <p className="editor-hint">
-                    O Instagram define onde o link abre. Abrir um site não
-                    autoriza uma nova mensagem.
-                  </p>
-                </>
               ) : (
-                <div className="message-continuation">
+                <>
                   <div className="message-button-heading">
-                    <strong>Mensagem após este clique</strong>
-                    {button.nextMessage ? (
-                      <div className="row-actions">
-                        <button
-                          className="icon-button"
-                          type="button"
-                          aria-label="Duplicar próxima mensagem"
-                          disabled={
-                            message.buttons.length >= EDITOR_LIMITS.buttons
-                          }
-                          onClick={() =>
-                            onChange({
-                              ...message,
-                              buttons: [
-                                ...message.buttons,
-                                structuredClone(button),
-                              ],
-                            })
-                          }
-                        >
-                          <Copy size={14} />
-                        </button>
-                        <button
-                          className="icon-button danger-icon"
-                          type="button"
-                          aria-label="Remover próxima mensagem"
-                          onClick={() =>
-                            updateButton(index, { nextMessage: null })
-                          }
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    ) : null}
-                  </div>
-                  {button.nextMessage ? (
-                    <AutomationMessageEditor
-                      message={button.nextMessage}
-                      path={`${path}.buttons.${index}.nextMessage`}
-                      depth={depth + 1}
-                      showErrors={showErrors}
-                      onChange={(nextMessage) =>
-                        updateButton(index, { nextMessage })
-                      }
-                    />
-                  ) : (
-                    <>
-                      {error(`buttons.${index}.nextMessage`, false)}
+                    <strong>Botão {index + 1}</strong>
+                    <div className="row-actions">
                       <button
-                        className="editor-add-button"
                         type="button"
+                        className="icon-button"
+                        aria-label={`Recolher botão ${index + 1}`}
+                        aria-expanded={true}
+                        disabled={!complete}
                         onClick={() =>
-                          updateButton(index, { nextMessage: emptyMessage() })
+                          setCollapsedButtons(
+                            (current) => new Set([...current, index]),
+                          )
                         }
                       >
-                        <Plus size={14} /> Configurar próxima mensagem
+                        <ChevronUp size={15} />
                       </button>
+                      <button
+                        type="button"
+                        className="icon-button danger-icon"
+                        aria-label={`Remover botão ${index + 1}`}
+                        onClick={() => {
+                          setCollapsedButtons(
+                            (current) =>
+                              new Set(
+                                [...current]
+                                  .filter((i) => i !== index)
+                                  .map((i) => (i > index ? i - 1 : i)),
+                              ),
+                          );
+                          onChange({
+                            ...message,
+                            buttons: message.buttons.filter(
+                              (_, i) => i !== index,
+                            ),
+                          });
+                        }}
+                      >
+                        <X size={15} />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="button-field-label">
+                    <label htmlFor={`${buttonId}-label`}>Título do botão</label>
+                    <span className="button-title-count">
+                      {characterCount(button.label)}/20
+                    </span>
+                  </div>
+                  <input
+                    id={`${buttonId}-label`}
+                    value={button.label}
+                    maxLength={200}
+                    placeholder="Escreva o título"
+                    onChange={(event) =>
+                      updateButton(index, { label: event.target.value })
+                    }
+                  />
+                  {error(`buttons.${index}.label`, !!button.label)}
+                  <label htmlFor={`${buttonId}-action`}>
+                    O que acontece ao clicar?
+                  </label>
+                  <select
+                    id={`${buttonId}-action`}
+                    value={button.action}
+                    onChange={(event) => {
+                      const action = event.target
+                        .value as MessageButton["action"];
+                      // Keep both branches when changing action so an edit never discards user content.
+                      updateButton(index, {
+                        action,
+                        ...(action === "NEXT_MESSAGE" && !button.nextMessage
+                          ? { nextMessage: emptyMessage() }
+                          : {}),
+                      });
+                    }}
+                  >
+                    <option value="OPEN_URL">Abrir site externo</option>
+                    <option value="NEXT_MESSAGE">
+                      Enviar próxima mensagem
+                    </option>
+                  </select>
+                  {button.action === "OPEN_URL" ? (
+                    <>
+                      <label htmlFor={`${buttonId}-url`}>URL do site</label>
+                      <input
+                        id={`${buttonId}-url`}
+                        type="text"
+                        inputMode="url"
+                        value={button.url}
+                        placeholder="https://"
+                        maxLength={2000}
+                        onChange={(event) =>
+                          updateButton(index, { url: event.target.value })
+                        }
+                      />
+                      {error(`buttons.${index}.url`, !!button.url)}
                     </>
+                  ) : (
+                    <div className="message-continuation">
+                      <div className="message-button-heading">
+                        <strong>Mensagem após este clique</strong>
+                        {button.nextMessage ? (
+                          <div className="row-actions">
+                            <button
+                              className="icon-button"
+                              type="button"
+                              aria-label="Duplicar próxima mensagem"
+                              disabled={
+                                message.buttons.length >= EDITOR_LIMITS.buttons
+                              }
+                              onClick={() =>
+                                onChange({
+                                  ...message,
+                                  buttons: [
+                                    ...message.buttons,
+                                    structuredClone(button),
+                                  ],
+                                })
+                              }
+                            >
+                              <Copy size={14} />
+                            </button>
+                            <button
+                              className="icon-button danger-icon"
+                              type="button"
+                              aria-label="Remover próxima mensagem"
+                              onClick={() =>
+                                updateButton(index, { nextMessage: null })
+                              }
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
+                      {button.nextMessage ? (
+                        <AutomationMessageEditor
+                          message={button.nextMessage}
+                          path={`${path}.buttons.${index}.nextMessage`}
+                          depth={depth + 1}
+                          showErrors={showErrors}
+                          onChange={(nextMessage) =>
+                            updateButton(index, { nextMessage })
+                          }
+                        />
+                      ) : (
+                        <>
+                          {error(`buttons.${index}.nextMessage`, false)}
+                          <button
+                            className="editor-add-button"
+                            type="button"
+                            onClick={() =>
+                              updateButton(index, {
+                                nextMessage: emptyMessage(),
+                              })
+                            }
+                          >
+                            <Plus size={14} /> Configurar próxima mensagem
+                          </button>
+                        </>
+                      )}
+                    </div>
                   )}
-                </div>
+                </>
               )}
             </div>
           );

@@ -18,6 +18,11 @@ import {
   isHttpsUrl,
   matchingKeywords,
 } from "@/lib/automation-rules";
+import {
+  fallbackPublicReply,
+  rotatingPublicReply,
+  type DmOutcome,
+} from "@/lib/public-replies";
 
 type Entry = { path: string; message: MessageDraft; initial: boolean };
 
@@ -38,6 +43,24 @@ export function AutomationConversationPreview({
   const [comment, setComment] = useState("");
   const [tested, setTested] = useState(false);
   const [replied, setReplied] = useState(false);
+  const [publicCursor, setPublicCursor] = useState(-1);
+  const [dmOutcome, setDmOutcome] = useState<DmOutcome["kind"]>("UNCONFIRMED");
+  const alternative = testMode
+    ? fallbackPublicReply(
+        draft.publicReplies,
+        dmOutcome === "DEFINITIVE_FAILURE"
+          ? {
+              kind: dmOutcome,
+              identifiedError:
+                "Erro definitivo fictício selecionado no simulador",
+              fallbackJustified: true,
+            }
+          : { kind: dmOutcome },
+      )
+    : null;
+  const publicText =
+    alternative ??
+    rotatingPublicReply(draft.publicReplies, Math.max(0, publicCursor));
   const matches = matchingKeywords(comment, draft.keywords);
   const issues = activationIssues(draft);
   const triggered = !testMode || !tested || matches.length > 0;
@@ -78,12 +101,6 @@ export function AutomationConversationPreview({
         kind: step.kind,
         text: `Adicionar tag: ${tags.find((tag) => tag.id === step.tagId)?.name || "ainda não selecionada"} · simulação`,
       });
-    else
-      annotations.push({
-        path,
-        kind: step.kind,
-        text: step.text || "Resposta pública ainda vazia",
-      });
   });
   const chosenUrl = urlChoice
     ? entries.find((entry) => entry.path === urlChoice.path)?.message.buttons[
@@ -100,6 +117,8 @@ export function AutomationConversationPreview({
     setUrlChoice(null);
     setReplied(false);
     setTested(false);
+    setPublicCursor(-1);
+    setDmOutcome("UNCONFIRMED");
   }
   function choose(entry: Entry, index: number) {
     const button = entry.message.buttons[index];
@@ -168,6 +187,8 @@ export function AutomationConversationPreview({
               setChoices({});
               setUrlChoice(null);
               setReplied(false);
+              setPublicCursor((current) => current + 1);
+              setDmOutcome("UNCONFIRMED");
             }}
           >
             Simular comentário
@@ -298,6 +319,52 @@ export function AutomationConversationPreview({
               {item.text}
             </div>
           ))}
+        </div>
+      ) : null}
+      {triggered &&
+      (draft.publicReplies.enabled || draft.publicReplies.fallback.enabled) ? (
+        <div
+          className="public-reply-preview"
+          aria-label="Prévia das respostas públicas"
+        >
+          <h3>
+            {alternative
+              ? "Resposta alternativa · falha definitiva simulada"
+              : "Resposta pública · prévia independente"}
+          </h3>
+          {testMode && draft.publicReplies.fallback.enabled ? (
+            <>
+              <label htmlFor="simulated-dm-outcome">
+                Situação fictícia da DM
+              </label>
+              <select
+                id="simulated-dm-outcome"
+                value={dmOutcome}
+                onChange={(event) =>
+                  setDmOutcome(event.target.value as DmOutcome["kind"])
+                }
+              >
+                <option value="UNCONFIRMED">Sem erro identificado</option>
+                <option value="API_ACCEPTED">
+                  API aceitou · entrega não confirmada
+                </option>
+                <option value="DELAYED">Atraso no envio</option>
+                <option value="TEMPORARY_FAILURE">Falha temporária</option>
+                <option value="DEFINITIVE_FAILURE">
+                  Falha definitiva identificada que justifica a alternativa
+                </option>
+              </select>
+            </>
+          ) : null}
+          <p>
+            {publicText ||
+              (draft.publicReplies.enabled
+                ? "Nenhuma variação preenchida e válida."
+                : "Respostas públicas automáticas desativadas.")}
+          </p>
+          <small className="conversation-message-context">
+            Prévia separada da DM; não estabelece a ordem de envio.
+          </small>
         </div>
       ) : null}
       <div className="simulation-controls">
