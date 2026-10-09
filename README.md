@@ -1,8 +1,8 @@
 # Elo · Automação Instagram
 
-Base de uma plataforma privada de automações para Instagram, com interface em português do Brasil. **Esta entrega corresponde somente à Etapa 1.**
+Base de uma plataforma privada de automações para Instagram, com interface em português do Brasil. Esta entrega cobre a fundação segura e o editor da Etapa 2.
 
-O proprietário pode entrar com segurança e organizar tags com persistência em PostgreSQL. Painel principal, Automações, Saúde do Sistema e Configurações apresentam estados vazios e recursos futuros de forma explícita. Não há dados fictícios, integração Meta, OAuth, webhooks, filas, editor ou motor de automações.
+O proprietário pode entrar com segurança, organizar tags e criar rascunhos de automações com persistência em PostgreSQL. O editor sequencial reúne escopo, palavras-chave e etapas de DM, botões, tags, atrasos e respostas públicas, com prévia local antes de salvar. A integração Meta, OAuth, webhooks, filas e execução real continuam fora desta etapa.
 
 Repositório: [brunodallier/automacao-instagram](https://github.com/brunodallier/automacao-instagram).
 
@@ -131,7 +131,8 @@ npm start
 - Sessão criptografada em cookie HttpOnly; limite absoluto de oito horas nas rotas protegidas.
 - Limite persistente de dez tentativas por e-mail em uma janela de quinze minutos, compartilhado entre processos. A mensagem de falha não revela se o usuário existe.
 - Painel com quatro métricas zeradas, estado de conexão e primeiros passos baseados na quantidade real de tags.
-- Listagem de automações preparada com nome, status, escopo, criação, última execução e ações futuras.
+- Automações: criação, edição, exclusão e persistência de rascunhos com escopo, palavras-chave, etapas ordenadas e prévia local.
+- A seleção de Reels específicos fica bloqueada até a conexão real com o Instagram; o backend rejeita esse escopo enquanto não houver Reels sincronizados.
 - Tags: criação, listagem, busca, renomeação e exclusão confirmada, com validação no frontend e backend.
 - Nomes de tags com até cinquenta caracteres, espaços normalizados e unicidade por espaço sem distinção entre maiúsculas e minúsculas. Acentos continuam significativos.
 - A restrição única no PostgreSQL impede duplicação mesmo em gravações concorrentes. Renomear mantém o ID e a data de criação.
@@ -141,13 +142,13 @@ npm start
 
 ## Dados e autorização
 
-O schema contém `User`, `Workspace`, `WorkspaceMembership`, `Tag`, `SocialAccount` e `LoginRateLimit`. Contas sociais guardam somente metadados; não há campos de tokens da Meta nesta etapa.
+O schema contém `User`, `Workspace`, `WorkspaceMembership`, `Tag`, `SocialAccount`, `LoginRateLimit`, `Automation`, `AutomationKeyword`, `AutomationStep` e `AutomationReel`. Contas sociais guardam somente metadados; não há campos de tokens da Meta nesta etapa.
 
 Cada consulta e mutação de tag obtém o workspace pela sessão validada no servidor. O cliente não escolhe um workspace. As mutações verificam a origem da solicitação e aceitam somente o formato validado. Os formulários do Auth.js usam a proteção CSRF da biblioteca.
 
 `WorkspaceMembership` prepara a separação de usuários e espaços futuros, mas não oferece cadastro, convite, seleção de workspace ou gestão multiusuário.
 
-Tags têm ID estável e pertencem ao workspace. As relações futuras com contatos e automações devem referenciar `Tag.id`, nunca seu nome. Tabelas de contatos, automações e associações serão definidas após o modelo do motor; a política de exclusão de tags em uso também deverá ser definida nessa etapa.
+Tags têm ID estável e pertencem ao workspace. As etapas de tag referenciam `Tag.id`, nunca seu nome. `AutomationReel` prepara a associação futura com Reels sincronizados sem criar dados fictícios; a política de exclusão de tags em uso e a ativação do motor ainda deverão ser definidas.
 
 ## Testes e verificações
 
@@ -176,8 +177,8 @@ npm run test:e2e
 
 Os testes recusam um banco sem `test` no nome ou uma URL igual à da aplicação. Aplicam migrations nesse banco separado e removem somente os registros criados pelo próprio teste. Não substitua `DATABASE_URL` pelo banco de testes ao executar esses comandos.
 
-- Integração: PostgreSQL real, persistência em outra conexão, concorrência, renomeação com ID preservado, duplicidade, validação e isolamento entre workspaces.
-- Navegador: login, proteção das cinco páginas e API, CRUD de tags, recarregamento, busca, confirmação/cancelamento da exclusão, bloqueio de origem externa, isolamento, navegação móvel, cookie HttpOnly, limite de oito horas, logout, revogação de sessão e limite de tentativas.
+- Integração: PostgreSQL real, persistência em outra conexão, concorrência, renomeação com ID preservado, duplicidade, validação e isolamento entre workspaces, além da sequência de palavras-chave e etapas das automações.
+- Navegador: login, proteção das páginas e APIs, CRUD de tags, editor sequencial de automações, prévia do rascunho, recarregamento, confirmação/cancelamento da exclusão, bloqueio de origem externa, isolamento, navegação móvel, cookie HttpOnly, limite de oito horas, logout, revogação de sessão e limite de tentativas.
 - O navegador executa a versão de produção na porta 3100. Rode `npm run build` antes dos testes e mantenha essa porta livre.
 - Credenciais de teste são aleatórias, temporárias e não são disponibilizadas como login da aplicação.
 - Capturas locais em `test-results/` e traces de falhas não são versionados.
@@ -205,6 +206,7 @@ src/
     (private)/              Painel, automações, tags, saúde e configurações
     api/auth/               Endpoints do Auth.js
     api/tags/               CRUD autenticado e autorizado
+    api/automacoes/         Rascunhos autenticados e autorizados
     login/                  Acesso do proprietário
     globals.css             Tema, componentes e responsividade
   components/               Navegação, formulários e interface
@@ -221,7 +223,7 @@ compose.yaml                PostgreSQL para desenvolvimento
 
 ## Próximas etapas
 
-A Etapa 2 será o editor sequencial: escolha de Reels, palavras-chave, DMs, botões, tags, atrasos, respostas públicas e testes de fluxos. O contrato de apresentação está em `src/lib/automation-contract.ts`; nenhuma operação do motor é implementada ali.
+A próxima etapa deve conectar a conta Instagram pela Meta, sincronizar Reels e habilitar a seleção de Reels específicos. Depois disso, serão definidos OAuth, tokens, webhooks, processamento, limites oficiais de envio, ativação, filas e recuperação de falhas.
 
 **Regra a preservar:** automações específicas de um Reel têm prioridade sobre automações globais.
 

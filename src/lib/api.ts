@@ -14,7 +14,7 @@ export async function readJson(request: Request) {
   if (!request.headers.get("content-type")?.startsWith("application/json"))
     throw new TagError("Envie os dados em JSON.", 400);
   const raw = await request.text();
-  if (raw.length > 2048) throw new TagError("Solicitação muito grande.", 413);
+  if (raw.length > 65536) throw new TagError("Solicitação muito grande.", 413);
   try {
     return JSON.parse(raw) as unknown;
   } catch {
@@ -22,15 +22,24 @@ export async function readJson(request: Request) {
   }
 }
 
+function isApiError(error: unknown): error is { message: string; status: number } {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    "status" in error &&
+    typeof error.message === "string" &&
+    typeof error.status === "number"
+  );
+}
+
 export function apiError(error: unknown) {
-  if (error instanceof TagError)
+  if (error instanceof TagError || isApiError(error))
     return NextResponse.json(
       { error: error.message },
       { status: error.status },
     );
-  console.error(
-    "Falha em operação de tags. Verifique a disponibilidade do banco.",
-  );
+  console.error("Falha em operação autenticada. Verifique a disponibilidade do banco.");
   return NextResponse.json(
     { error: "Não foi possível concluir. Tente novamente em instantes." },
     { status: 503 },

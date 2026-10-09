@@ -265,8 +265,8 @@ test("navegação móvel e páginas futuras funcionam sem ultrapassar a tela", a
     page.getByRole("heading", { name: "Automações", exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Nova automação" }),
-  ).toBeDisabled();
+    page.getByRole("link", { name: "Nova automação" }),
+  ).toBeVisible();
   await page.goto("/saude");
   await expect(
     page.getByText("Nenhuma verificação realizada", { exact: true }),
@@ -282,6 +282,26 @@ test("navegação móvel e páginas futuras funcionam sem ultrapassar a tela", a
     path: "test-results/configuracoes-mobile.png",
     fullPage: true,
   });
+});
+
+test("cria um rascunho no editor sequencial e revisa a prévia", async ({ page }) => {
+  await login(page);
+  await page.goto("/automacoes/nova");
+  await page.getByLabel("Nome da automação").fill("Catálogo por comentário");
+  await page.getByLabel("Adicionar palavra-chave").fill("quero");
+  await page.getByRole("button", { name: "Adicionar" }).click();
+  await page.getByRole("button", { name: "DM", exact: true }).click();
+  await page.getByLabel("Mensagem da DM").fill("Oi! Aqui está o catálogo.");
+  await page.getByRole("button", { name: "Salvar rascunho" }).click();
+  await expect(page.getByRole("status")).toContainText("Rascunho salvo com segurança.");
+  await page.getByRole("button", { name: "Testar rascunho" }).click();
+  await expect(page.locator(".preview-message", { hasText: "Oi! Aqui está o catálogo." })).toBeVisible();
+  await page.goto("/automacoes");
+  await expect(page.getByText("Catálogo por comentário", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Mais ações para Catálogo por comentário" }).click();
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "Excluir" }).click();
+  await expect(page.getByText("Catálogo por comentário", { exact: true })).toHaveCount(0);
 });
 
 test("salva prévias da interface desktop e mobile", async ({ page }) => {

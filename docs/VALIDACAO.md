@@ -1,16 +1,16 @@
-# Validação da Etapa 1
+# Validação das Etapas 1 e 2
 
 Verificações realizadas em 9 de outubro de 2026, no Windows, com Node.js 24.14.1.
 
 | Verificação | Resultado |
 | --- | --- |
 | `npm test` | 16 testes unitários aprovados |
-| `npm run test:integration` | 7 testes aprovados em PostgreSQL real |
-| `npm run test:e2e` | 10 testes aprovados em Chromium, usando build de produção |
+| `npm run test:integration` | 12 testes aprovados em PostgreSQL real |
+| `npm run test:e2e` | 11 testes aprovados em Chromium, usando build de produção |
 | `npm run typecheck` | Aprovado |
 | `npm run lint` | Aprovado, sem erros ou avisos do lint |
 | `npm run build` | Aprovado |
-| Migrations | Duas migrations aplicadas com sucesso |
+| Migrations | Três migrations aplicadas com sucesso |
 | `npm audit --omit=dev` | Nenhum alerta |
 | Auditoria completa | Cinco alertas na cadeia de ferramentas de desenvolvimento; detalhes no README |
 
@@ -22,4 +22,4 @@ O PostgreSQL usava o fuso America/Sao_Paulo. A validação do bloqueio de login 
 
 Todos os usuários, espaços e tags das fixtures foram removidos pelos testes. Nenhum proprietário real foi criado, pois o usuário deve escolher seu e-mail e sua senha pelo comando `npm run owner:setup`.
 
-Editor, OAuth da Meta, webhooks, filas e motor de automações permanecem fora desta entrega.
+OAuth da Meta, sincronização de Reels, webhooks, filas e motor de execução permanecem fora desta entrega. O editor salvo nesta etapa trabalha com rascunhos e prévia local.

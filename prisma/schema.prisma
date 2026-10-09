@@ -24,6 +24,27 @@ enum SocialConnectionStatus {
   ERROR
 }
 
+enum AutomationStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  ERROR
+}
+
+enum AutomationScope {
+  GLOBAL
+  FUTURE_REELS
+  SPECIFIC_REELS
+}
+
+enum AutomationStepKind {
+  SEND_DM
+  BUTTONS
+  ADD_TAG
+  DELAY
+  PUBLIC_REPLY
+}
+
 model User {
   id             String                @id @default(cuid())
   name           String
@@ -43,6 +64,7 @@ model Workspace {
   memberships  WorkspaceMembership[]
   tags         Tag[]
   socialAccounts SocialAccount[]
+  automations  Automation[]
 }
 
 model WorkspaceMembership {
@@ -66,9 +88,71 @@ model Tag {
   createdAt      DateTime  @default(now()) @db.Timestamptz(3)
   updatedAt      DateTime  @updatedAt @db.Timestamptz(3)
   workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  automationSteps AutomationStep[]
 
   @@unique([workspaceId, normalizedName])
   @@index([workspaceId, createdAt])
+}
+
+model Automation {
+  id             String             @id @default(cuid())
+  workspaceId    String
+  name           String             @db.VarChar(80)
+  status         AutomationStatus   @default(DRAFT)
+  scope          AutomationScope     @default(GLOBAL)
+  lastExecutedAt DateTime?          @db.Timestamptz(3)
+  createdAt      DateTime           @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime           @updatedAt @db.Timestamptz(3)
+  workspace      Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  keywords       AutomationKeyword[]
+  steps          AutomationStep[]
+  reels          AutomationReel[]
+
+  @@index([workspaceId, updatedAt])
+  @@index([workspaceId, status])
+}
+
+model AutomationKeyword {
+  id             String     @id @default(cuid())
+  automationId   String
+  value          String     @db.VarChar(40)
+  normalizedValue String    @db.VarChar(40)
+  createdAt      DateTime   @default(now()) @db.Timestamptz(3)
+  automation     Automation @relation(fields: [automationId], references: [id], onDelete: Cascade)
+
+  @@unique([automationId, normalizedValue])
+  @@index([automationId, createdAt])
+}
+
+model AutomationStep {
+  id           String             @id @default(cuid())
+  automationId String
+  position     Int
+  kind         AutomationStepKind
+  text         String?            @db.Text
+  delaySeconds Int?
+  tagId        String?
+  buttons      Json?
+  createdAt    DateTime           @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime           @updatedAt @db.Timestamptz(3)
+  automation   Automation         @relation(fields: [automationId], references: [id], onDelete: Cascade)
+  tag          Tag?               @relation(fields: [tagId], references: [id], onDelete: SetNull)
+
+  @@unique([automationId, position])
+  @@index([automationId, position])
+}
+
+model AutomationReel {
+  id           String     @id @default(cuid())
+  automationId String
+  externalId   String     @db.VarChar(120)
+  title        String?    @db.VarChar(160)
+  permalink    String?    @db.VarChar(500)
+  createdAt    DateTime   @default(now()) @db.Timestamptz(3)
+  automation   Automation @relation(fields: [automationId], references: [id], onDelete: Cascade)
+
+  @@unique([automationId, externalId])
+  @@index([automationId])
 }
 
 // Somente metadados. OAuth, tokens e integrações serão definidos em outra etapa.
