@@ -65,6 +65,15 @@ test("protege todas as páginas e APIs sem sessão", async ({
     await expect(page).toHaveURL(/\/login$/);
   }
   expect((await request.get("/api/tags")).status()).toBe(401);
+  expect((await request.get("/api/automacoes")).status()).toBe(401);
+  expect(
+    (
+      await request.post("/api/automacoes", {
+        headers: { Origin: "http://localhost:3100" },
+        data: { name: "", scope: "GLOBAL", keywords: [], steps: [] },
+      })
+    ).status(),
+  ).toBe(401);
   expect(
     (
       await request.post("/api/tags", {
@@ -284,7 +293,9 @@ test("navegação móvel e páginas futuras funcionam sem ultrapassar a tela", a
   });
 });
 
-test("cria um rascunho no editor sequencial e revisa a prévia", async ({ page }) => {
+test("cria um rascunho no editor sequencial e revisa a prévia", async ({
+  page,
+}) => {
   await login(page);
   await page.goto("/automacoes/nova");
   await page.getByLabel("Nome da automação").fill("Catálogo por comentário");
@@ -293,15 +304,407 @@ test("cria um rascunho no editor sequencial e revisa a prévia", async ({ page }
   await page.getByRole("button", { name: "DM", exact: true }).click();
   await page.getByLabel("Mensagem da DM").fill("Oi! Aqui está o catálogo.");
   await page.getByRole("button", { name: "Salvar rascunho" }).click();
-  await expect(page.getByRole("status")).toContainText("Rascunho salvo com segurança.");
+  await expect(page.getByRole("status")).toContainText(
+    "Rascunho salvo com segurança.",
+  );
   await page.getByRole("button", { name: "Testar rascunho" }).click();
-  await expect(page.locator(".preview-message", { hasText: "Oi! Aqui está o catálogo." })).toBeVisible();
+  await expect(
+    page.locator(".preview-message", { hasText: "Oi! Aqui está o catálogo." }),
+  ).toBeVisible();
   await page.goto("/automacoes");
-  await expect(page.getByText("Catálogo por comentário", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Mais ações para Catálogo por comentário" }).click();
+  await expect(
+    page.getByText("Catálogo por comentário", { exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Mais ações para Catálogo por comentário" })
+    .click();
   page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "Excluir" }).click();
-  await expect(page.getByText("Catálogo por comentário", { exact: true })).toHaveCount(0);
+  await expect(
+    page.getByText("Catálogo por comentário", { exact: true }),
+  ).toHaveCount(0);
+});
+
+test("salva e reabre rascunho sem nome, com DM vazia e bloqueia ativação", async ({
+  page,
+}) => {
+  await login(page);
+  await page.goto("/automacoes/nova");
+  await page.getByRole("button", { name: "DM", exact: true }).click();
+  await expect(page.getByLabel("Mensagem da DM", { exact: true })).toHaveValue(
+    "",
+  );
+  await expect(
+    page.getByLabel("Mensagem da DM", { exact: true }),
+  ).toHaveAttribute("placeholder", "Escreva a mensagem que será enviada");
+  await page.getByRole("button", { name: "Salvar rascunho" }).click();
+  await expect(page.locator(".editor-feedback")).toContainText(
+    "Rascunho salvo",
+  );
+  const id = page.url().split("/").at(-1);
+  const response = await page.request.post(`/api/automacoes/${id}/ativar`, {
+    headers: { Origin: "http://localhost:3100" },
+  });
+  expect(response.status()).toBe(400);
+  expect((await response.json()).issues).toEqual(
+    expect.arrayContaining([expect.objectContaining({ path: "name" })]),
+  );
+  await page.reload();
+  await expect(page.getByLabel("Nome da automação")).toHaveValue("");
+  await page.locator(".step-summary").click();
+  await expect(page.getByLabel("Mensagem da DM", { exact: true })).toHaveValue(
+    "",
+  );
+  await page.getByRole("button", { name: "Testar rascunho" }).click();
+  await expect(page.getByLabel("Comentário fictício")).toBeVisible();
+  await page.getByLabel("Comentário fictício").fill("Um comentário");
+  await page.getByRole("button", { name: "Simular comentário" }).click();
+  await expect(page.locator(".trigger-result")).toContainText(
+    "Nenhuma palavra-chave",
+  );
+  await page.goto("/automacoes");
+  await expect(
+    page.getByText("Rascunho sem título", { exact: true }),
+  ).toBeVisible();
+});
+
+test("personaliza botões, continuações e prévia interativa sem salvar", async ({
+  page,
+}) => {
+  await login(page);
+  await page.goto("/automacoes/nova");
+  await page.getByLabel("Adicionar palavra-chave").fill("quero");
+  await page.getByRole("button", { name: "Adicionar", exact: true }).click();
+  await page.getByRole("button", { name: "DM", exact: true }).click();
+  await page
+    .getByLabel("Mensagem da DM", { exact: true })
+    .fill("Minha oferta 😊");
+  const simulator = page.getByRole("region", { name: "Simulador de conversa" });
+  await expect(simulator.locator(".conversation-text")).toHaveText(
+    "Minha oferta 😊",
+  );
+  await page
+    .getByRole("button", { name: "Adicionar botão", exact: true })
+    .click();
+  const buttons = page
+    .locator(".message-button-fields")
+    .first()
+    .locator(":scope > .message-button-card");
+  await expect(buttons.nth(0).getByLabel("Título do botão")).toHaveValue("");
+  await expect(buttons.nth(0).getByLabel("URL do site")).toHaveValue("");
+  await buttons.nth(0).getByLabel("Título do botão").fill("Meu site");
+  await buttons
+    .nth(0)
+    .getByLabel("URL do site")
+    .fill("https://example.com/oferta");
+  await page
+    .getByRole("button", { name: "Adicionar botão", exact: true })
+    .click();
+  await buttons
+    .nth(1)
+    .getByLabel("Título do botão", { exact: true })
+    .fill("Continuar");
+  await buttons
+    .nth(1)
+    .getByLabel("O que acontece quando alguém clicar?", { exact: true })
+    .selectOption("NEXT_MESSAGE");
+  await expect(buttons.nth(1).getByLabel("URL do site")).toHaveCount(0);
+  await page
+    .getByLabel("Texto da próxima mensagem", { exact: true })
+    .fill("Minha segunda mensagem");
+  const child = page.getByRole("group", {
+    name: "Próxima mensagem",
+    exact: true,
+  });
+  await child
+    .getByRole("button", { name: "Adicionar botão", exact: true })
+    .click();
+  await child
+    .getByLabel("Título do botão", { exact: true })
+    .fill("Mais detalhes");
+  await child
+    .getByLabel("O que acontece quando alguém clicar?", { exact: true })
+    .selectOption("NEXT_MESSAGE");
+  await page
+    .getByLabel("Texto da próxima mensagem", { exact: true })
+    .nth(1)
+    .fill("Terceira mensagem");
+  await simulator
+    .getByRole("button", { name: "Continuar", exact: true })
+    .click();
+  await expect(
+    simulator.getByText("Minha segunda mensagem", { exact: true }),
+  ).toBeVisible();
+  await simulator
+    .getByRole("button", { name: "Mais detalhes", exact: true })
+    .click();
+  await expect(
+    simulator.getByText("Terceira mensagem", { exact: true }),
+  ).toBeVisible();
+  await page.screenshot({
+    path: "test-results/editor-desktop.png",
+    fullPage: true,
+  });
+  await simulator.getByRole("button", { name: "Voltar", exact: true }).click();
+  await expect(
+    simulator.getByText("Terceira mensagem", { exact: true }),
+  ).toHaveCount(0);
+  await simulator.getByRole("button", { name: "Reiniciar simulação" }).click();
+  await expect(
+    simulator.getByText("Minha segunda mensagem", { exact: true }),
+  ).toHaveCount(0);
+  await simulator
+    .getByRole("button", { name: "Meu site", exact: true })
+    .click();
+  await expect(simulator.locator(".simulated-url")).toContainText(
+    "https://example.com/oferta",
+  );
+  await expect(
+    simulator.getByRole("link", { name: "Abrir site em nova aba" }),
+  ).toHaveAttribute("rel", "noopener noreferrer");
+  await buttons.nth(0).getByLabel("Título do botão").fill("Título editado");
+  await expect(
+    simulator.getByRole("button", { name: "Título editado", exact: true }),
+  ).toBeVisible();
+  await buttons
+    .nth(0)
+    .getByRole("button", { name: "Remover botão 1", exact: true })
+    .click();
+  await expect(
+    simulator.getByRole("button", { name: "Título editado", exact: true }),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "Testar rascunho" }).click();
+  await page.getByLabel("Comentário fictício").fill("QUERO receber detalhes!");
+  await page.getByRole("button", { name: "Simular comentário" }).click();
+  await expect(page.locator(".trigger-result")).toContainText(
+    "acionaria a automação",
+  );
+  await page.getByLabel("Comentário fictício").fill("outro assunto");
+  await page.getByRole("button", { name: "Simular comentário" }).click();
+  await expect(page.locator(".trigger-result")).toContainText("não acionaria");
+  expect((await page.request.get("/api/automacoes")).status()).toBe(200);
+  expect(await (await page.request.get("/api/automacoes")).json()).toHaveLength(
+    0,
+  );
+});
+
+test("salva URL incompleta, preserva continuação ao trocar ação e reabrir", async ({
+  page,
+}) => {
+  await login(page);
+  await page.goto("/automacoes/nova");
+  await page.getByRole("button", { name: "DM", exact: true }).click();
+  await page
+    .getByLabel("Mensagem da DM", { exact: true })
+    .fill("Texto personalizado");
+  await page
+    .getByRole("button", { name: "Adicionar botão", exact: true })
+    .click();
+  await page.getByLabel("Título do botão", { exact: true }).fill("Continuar");
+  await page.getByLabel("URL do site").fill("https://");
+  await expect(
+    page.locator(".field-error").filter({ hasText: "URL HTTPS" }),
+  ).toBeVisible();
+  await page
+    .getByLabel("O que acontece quando alguém clicar?")
+    .selectOption("NEXT_MESSAGE");
+  await page
+    .getByLabel("Texto da próxima mensagem", { exact: true })
+    .fill("Continuação personalizada");
+  await page
+    .getByLabel("O que acontece quando alguém clicar?")
+    .selectOption("OPEN_URL");
+  await expect(page.getByLabel("URL do site")).toHaveValue("https://");
+  await page.getByRole("button", { name: "Salvar rascunho" }).click();
+  await expect(page.locator(".editor-feedback")).toContainText(
+    "Rascunho salvo",
+  );
+  await page.reload();
+  await page.locator(".step-summary").click();
+  await expect(page.getByLabel("URL do site")).toHaveValue("https://");
+  await page
+    .getByLabel("O que acontece quando alguém clicar?")
+    .selectOption("NEXT_MESSAGE");
+  await expect(
+    page.getByLabel("Texto da próxima mensagem", { exact: true }),
+  ).toHaveValue("Continuação personalizada");
+  await page.getByRole("button", { name: "Salvar rascunho" }).click();
+  await expect(page.locator(".editor-feedback")).toContainText(
+    "Rascunho salvo",
+  );
+  await page.reload();
+  await page.locator(".step-summary").click();
+  await expect(
+    page.getByLabel("Texto da próxima mensagem", { exact: true }),
+  ).toHaveValue("Continuação personalizada");
+  await page
+    .getByRole("button", { name: "Duplicar mensagem ou etapa" })
+    .click();
+  await expect(page.locator(".editor-step")).toHaveCount(2);
+  await expect(page.getByLabel("Mensagem da DM", { exact: true })).toHaveValue(
+    "Texto personalizado",
+  );
+  await page.getByRole("button", { name: "Excluir etapa" }).click();
+  await expect(page.locator(".editor-step")).toHaveCount(1);
+});
+
+test("simula tags e atrasos, limita botões e não altera registros", async ({
+  page,
+}) => {
+  const tag = await client.tag.create({
+    data: {
+      workspaceId,
+      name: "Tag personalizada",
+      normalizedName: "tag personalizada",
+    },
+  });
+  await login(page);
+  await page.goto("/automacoes/nova");
+  await page.getByRole("button", { name: "DM", exact: true }).click();
+  await page
+    .getByLabel("Mensagem da DM", { exact: true })
+    .fill("😊".repeat(251));
+  await expect(page.locator(".message-count")).toContainText("1004 bytes");
+  await expect(
+    page.locator(".field-error").filter({ hasText: "1.000 bytes" }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Adicionar botão", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Adicionar botão", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Adicionar botão", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Adicionar botão", exact: true }),
+  ).toBeDisabled();
+  await page.getByRole("button", { name: "Tag", exact: true }).click();
+  await expect(page.getByLabel("Tag para adicionar")).toHaveValue("");
+  await page.getByLabel("Tag para adicionar").selectOption(tag.id);
+  await page.getByRole("button", { name: "Atraso", exact: true }).click();
+  await page.getByLabel("Esperar antes da próxima etapa").fill("30");
+  await page.getByRole("button", { name: "Testar rascunho" }).click();
+  await expect(page.locator(".simulation-actions")).toContainText(
+    "Tag personalizada",
+  );
+  await expect(page.locator(".simulation-actions")).toContainText(
+    "30 segundos",
+  );
+  expect(
+    (await client.tag.findMany({ where: { workspaceId } })).map(
+      (item) => item.id,
+    ),
+  ).toEqual([tag.id]);
+  expect(await client.automation.count({ where: { workspaceId } })).toBe(0);
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+  await page.screenshot({
+    path: "test-results/editor-mobile.png",
+    fullPage: true,
+  });
+});
+
+test("mantém etapa antiga de botões editável e preserva título e URL", async ({
+  page,
+}) => {
+  const old = await client.automation.create({
+    data: {
+      workspaceId,
+      name: "Automação antiga",
+      steps: {
+        create: {
+          position: 0,
+          kind: "BUTTONS",
+          text: "Mensagem antiga",
+          buttons: [
+            { label: "Meu botão antigo", url: "https://example.com/legado" },
+          ],
+        },
+      },
+    },
+  });
+  await login(page);
+  await page.goto(`/automacoes/${old.id}`);
+  await page.locator(".step-summary").click();
+  await expect(page.getByLabel("Mensagem da DM", { exact: true })).toHaveValue(
+    "Mensagem antiga",
+  );
+  await expect(page.getByLabel("Título do botão", { exact: true })).toHaveValue(
+    "Meu botão antigo",
+  );
+  await expect(page.getByLabel("URL do site")).toHaveValue(
+    "https://example.com/legado",
+  );
+  await page
+    .getByLabel("Mensagem da DM", { exact: true })
+    .fill("Mensagem antiga revisada");
+  await page.getByRole("button", { name: "Salvar rascunho" }).click();
+  await expect(page.locator(".editor-feedback")).toContainText(
+    "Rascunho salvo",
+  );
+  await page.reload();
+  await page.locator(".step-summary").click();
+  await expect(page.getByLabel("Mensagem da DM", { exact: true })).toHaveValue(
+    "Mensagem antiga revisada",
+  );
+  await expect(page.getByLabel("Título do botão", { exact: true })).toHaveValue(
+    "Meu botão antigo",
+  );
+  await expect(page.getByLabel("URL do site")).toHaveValue(
+    "https://example.com/legado",
+  );
+});
+
+test("preserva alterações feitas enquanto uma versão anterior está salvando", async ({
+  page,
+}) => {
+  await login(page);
+  await page.goto("/automacoes/nova");
+  await page.getByRole("button", { name: "DM", exact: true }).click();
+  await page
+    .getByLabel("Mensagem da DM", { exact: true })
+    .fill("Primeira versão");
+  let release: () => void = () => {};
+  let captured: () => void = () => {};
+  const paused = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const intercepted = new Promise<void>((resolve) => {
+    captured = resolve;
+  });
+  await page.route("**/api/automacoes", async (route) => {
+    captured();
+    await paused;
+    await route.continue();
+  });
+  await page.getByRole("button", { name: "Salvar rascunho" }).click();
+  await intercepted;
+  await page
+    .getByLabel("Mensagem da DM", { exact: true })
+    .fill("Versão mais recente");
+  release();
+  await expect(page.locator(".editor-feedback")).toContainText(
+    "alterações recentes ainda não salvas",
+  );
+  await expect(page.getByLabel("Mensagem da DM", { exact: true })).toHaveValue(
+    "Versão mais recente",
+  );
+  await page.unroute("**/api/automacoes");
+  await page.getByRole("button", { name: "Salvar rascunho" }).click();
+  await expect(page.locator(".editor-feedback")).toContainText(
+    "Rascunho salvo com segurança.",
+  );
+  await page.reload();
+  await page.locator(".step-summary").click();
+  await expect(page.getByLabel("Mensagem da DM", { exact: true })).toHaveValue(
+    "Versão mais recente",
+  );
 });
 
 test("salva prévias da interface desktop e mobile", async ({ page }) => {

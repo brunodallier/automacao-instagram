@@ -9,11 +9,14 @@ import {
   idSchema,
   normalizeAutomationKeyword,
 } from "@/lib/validation";
+import { readStoredStep } from "@/lib/automation-draft";
+import { activationIssues } from "@/lib/automation-rules";
 
 export class AutomationError extends Error {
   constructor(
     message: string,
     public status: number,
+    public issues?: { path: string; message: string }[],
   ) {
     super(message);
   }
@@ -46,7 +49,8 @@ function parse(input: unknown) {
 
 function payload(value: ReturnType<typeof parse>) {
   return {
-    name: value.name,
+    name: value.name.trim() ? value.name : "Rascunho sem título",
+    nameIsProvisional: !value.name.trim(),
     scope: value.scope as AutomationScope,
     keywords: value.keywords.map((keyword) => ({
       value: keyword,
@@ -57,7 +61,7 @@ function payload(value: ReturnType<typeof parse>) {
       kind: step.kind,
       text: "text" in step ? step.text : null,
       delaySeconds: "delaySeconds" in step ? step.delaySeconds : null,
-      tagId: "tagId" in step ? step.tagId : null,
+      tagId: "tagId" in step ? step.tagId || null : null,
       buttons: "buttons" in step ? step.buttons : undefined,
     })),
   };
@@ -95,7 +99,7 @@ type AutomationWithDetails = Prisma.AutomationGetPayload<{
 function mapAutomation(automation: AutomationWithDetails) {
   return {
     id: automation.id,
-    name: automation.name,
+    name: automation.nameIsProvisional ? "" : automation.name,
     status: automation.status as AutomationStatus,
     scope: automation.scope as AutomationScope,
     createdAt: automation.createdAt.toISOString(),
@@ -110,7 +114,8 @@ function mapAutomation(automation: AutomationWithDetails) {
       .map((step) => ({
         id: step.id,
         position: step.position,
-        kind: step.kind as "SEND_DM" | "BUTTONS" | "ADD_TAG" | "DELAY" | "PUBLIC_REPLY",
+        kind: step.kind as
+          "SEND_DM" | "BUTTONS" | "ADD_TAG" | "DELAY" | "PUBLIC_REPLY",
         text: step.text,
         delaySeconds: step.delaySeconds,
         tagId: step.tagId,
@@ -150,6 +155,7 @@ export function automationService(client: PrismaClient) {
           data: {
             workspaceId,
             name: data.name,
+            nameIsProvisional: data.nameIsProvisional,
             scope: data.scope,
             keywords: { create: data.keywords },
             steps: { create: data.steps },
@@ -180,6 +186,7 @@ export function automationService(client: PrismaClient) {
             where: { id },
             data: {
               name: data.name,
+              nameIsProvisional: data.nameIsProvisional,
               scope: data.scope,
               status: "DRAFT",
               keywords: { create: data.keywords },
@@ -200,6 +207,36 @@ export function automationService(client: PrismaClient) {
       } catch (error) {
         errorFromDatabase(error);
       }
+    },
+    async activate(workspaceId: string, id: string) {
+      validateId(id);
+      let item;
+      try {
+        item = await client.automation.findFirstOrThrow({
+          where: { id, workspaceId },
+          include,
+        });
+      } catch (error) {
+        errorFromDatabase(error);
+      }
+      const saved = mapAutomation(item);
+      const draft = parse({
+        name: saved.name,
+        scope: saved.scope,
+        keywords: saved.keywords.map((keyword) => keyword.value),
+        steps: saved.steps.map(readStoredStep),
+      });
+      const issues = activationIssues(draft);
+      if (issues.length)
+        throw new AutomationError(
+          "Revise a automação antes de ativar.",
+          400,
+          issues,
+        );
+      throw new AutomationError(
+        "A ativação depende da integração com o Instagram, ainda não implementada.",
+        409,
+      );
     },
   };
 }

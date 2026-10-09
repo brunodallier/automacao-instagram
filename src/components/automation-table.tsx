@@ -46,7 +46,7 @@ export function AutomationTable({
   async function remove(item: AutomationItem) {
     if (
       !window.confirm(
-        `Excluir a automação “${item.name}”? Esta ação não pode ser desfeita.`,
+        `Excluir a automação “${item.name || "Rascunho sem título"}”? Esta ação não pode ser desfeita.`,
       )
     )
       return;
@@ -118,7 +118,7 @@ export function AutomationTable({
                   >
                     <Workflow size={16} aria-hidden="true" />
                     <span>
-                      <strong>{item.name}</strong>
+                      <strong>{item.name || "Rascunho sem título"}</strong>
                       <small>
                         {item.keywords.length}{" "}
                         {item.keywords.length === 1
@@ -155,14 +155,14 @@ export function AutomationTable({
                     <Link
                       className="icon-button"
                       href={`/automacoes/${item.id}`}
-                      aria-label={`Editar automação ${item.name}`}
+                      aria-label={`Editar automação ${item.name || "Rascunho sem título"}`}
                       title="Editar"
                     >
                       <Pencil size={17} />
                     </Link>
                     <button
                       className="icon-button"
-                      aria-label={`Mais ações para ${item.name}`}
+                      aria-label={`Mais ações para ${item.name || "Rascunho sem título"}`}
                       title="Mais ações"
                       onClick={() =>
                         setOpenId(openId === item.id ? null : item.id)

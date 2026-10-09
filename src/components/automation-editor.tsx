@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useRef, useState } from "react";
 import {
   ArrowDown,
   ArrowLeft,
   ArrowRight,
   ArrowUp,
   Clock3,
+  Copy,
   LoaderCircle,
   MessageCircle,
   MessageSquare,
@@ -19,105 +20,69 @@ import {
   WandSparkles,
   X,
 } from "lucide-react";
+import { AutomationMessageEditor } from "@/components/automation-message-editor";
+import { AutomationConversationPreview } from "@/components/automation-conversation-preview";
 import {
   automationDraftSchema,
+  EDITOR_LIMITS,
+  emptyMessage,
   normalizeAutomationKeyword,
-} from "@/lib/validation";
+  readStoredStep,
+  type AutomationDraft,
+  type AutomationStepDraft,
+  type StoredStep,
+} from "@/lib/automation-draft";
+import {
+  activationIssues,
+  characterCount,
+  utf8Bytes,
+} from "@/lib/automation-rules";
 
 type TagOption = { id: string; name: string };
-type ButtonValue = { label: string; url: string };
-type Step =
-  | { id?: string; kind: "SEND_DM"; text: string }
-  | { id?: string; kind: "PUBLIC_REPLY"; text: string }
-  | { id?: string; kind: "DELAY"; delaySeconds: number }
-  | { id?: string; kind: "ADD_TAG"; tagId: string }
-  | { id?: string; kind: "BUTTONS"; text: string; buttons: ButtonValue[] };
-type AutomationState = {
+type EditorStep = AutomationStepDraft & { editorKey: string };
+type EditorState = Omit<AutomationDraft, "steps"> & { steps: EditorStep[] };
+type SavedAutomation = {
+  id: string;
   name: string;
-  scope: "GLOBAL" | "FUTURE_REELS" | "SPECIFIC_REELS";
-  keywords: string[];
-  steps: Step[];
-};
-
-type PersistedStep = {
-  id: string;
-  position: number;
-  kind: Step["kind"];
-  text: string | null;
-  delaySeconds: number | null;
-  tagId: string | null;
-  buttons: unknown;
-};
-type SavedAutomation = Omit<AutomationState, "keywords" | "steps"> & {
-  id: string;
-  status: string;
-  createdAt: string;
-  updatedAt: string;
-  lastExecutedAt: string | null;
+  scope: AutomationDraft["scope"];
   keywords: { id: string; value: string }[];
-  steps: PersistedStep[];
-};
-
-const defaultState: AutomationState = {
-  name: "",
-  scope: "GLOBAL",
-  keywords: [],
-  steps: [],
+  steps: StoredStep[];
 };
 const stepLabels = {
   SEND_DM: "Mensagem privada",
+  BUTTONS: "Mensagem privada",
   PUBLIC_REPLY: "Resposta pública",
   DELAY: "Atraso",
   ADD_TAG: "Adicionar tag",
-  BUTTONS: "Botões",
 } as const;
-const stepDescriptions = {
-  SEND_DM: "Envie uma DM quando a palavra-chave for identificada.",
-  PUBLIC_REPLY: "Responda no comentário publicamente.",
-  DELAY: "Espere antes de continuar a conversa.",
-  ADD_TAG: "Marque a pessoa para organizar a conversa.",
-  BUTTONS: "Ofereça caminhos para a pessoa seguir.",
+const scopeLabels = {
+  GLOBAL: "Global",
+  FUTURE_REELS: "Reels futuros",
+  SPECIFIC_REELS: "Reels específicos",
 } as const;
-
-function fromAutomation(automation?: SavedAutomation): AutomationState {
-  if (!automation) return defaultState;
+function fromAutomation(automation?: SavedAutomation): EditorState {
+  if (!automation)
+    return { name: "", scope: "GLOBAL", keywords: [], steps: [] };
   return {
     name: automation.name,
     scope: automation.scope,
     keywords: automation.keywords.map((keyword) => keyword.value),
-    steps: automation.steps.map((step): Step => {
-      if (step.kind === "SEND_DM" || step.kind === "PUBLIC_REPLY") {
-        return { id: step.id, kind: step.kind, text: step.text ?? "" };
-      }
-      if (step.kind === "DELAY") {
-        return { id: step.id, kind: step.kind, delaySeconds: step.delaySeconds ?? 1 };
-      }
-      if (step.kind === "ADD_TAG") {
-        return { id: step.id, kind: step.kind, tagId: step.tagId ?? "" };
-      }
-      const buttons = Array.isArray(step.buttons)
-        ? step.buttons.filter(
-            (button): button is ButtonValue =>
-              typeof button === "object" &&
-              button !== null &&
-              "label" in button &&
-              typeof button.label === "string" &&
-              "url" in button &&
-              typeof button.url === "string",
-          )
-        : [];
-      return { id: step.id, kind: "BUTTONS", text: step.text ?? "", buttons };
+    steps: automation.steps.map((step) => ({
+      ...readStoredStep(step),
+      editorKey: step.id,
+    })),
+  };
+}
+function toDraft(state: EditorState): AutomationDraft {
+  return {
+    ...state,
+    steps: state.steps.map((step) => {
+      const { editorKey, ...data } = step;
+      void editorKey;
+      return data;
     }),
   };
 }
-
-function displayDelay(seconds: number) {
-  if (seconds >= 3600)
-    return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}min`;
-  if (seconds >= 60) return `${Math.floor(seconds / 60)}min`;
-  return `${seconds}s`;
-}
-
 export function AutomationEditor({
   automation,
   tags,
@@ -125,34 +90,37 @@ export function AutomationEditor({
   automation?: SavedAutomation;
   tags: TagOption[];
 }) {
-  const [state, setState] = useState<AutomationState>(() =>
+  const [state, setState] = useState<EditorState>(() =>
     fromAutomation(automation),
   );
   const [keywordInput, setKeywordInput] = useState("");
-  const [activeStep, setActiveStep] = useState<number | null>(null);
+  const [activeStep, setActiveStep] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [feedback, setFeedback] = useState<{
     type: "success" | "error" | "info";
     text: string;
   } | null>(null);
   const [savedId, setSavedId] = useState(automation?.id ?? "");
-  const [showPreview, setShowPreview] = useState(false);
-  const visibleId = savedId || automation?.id;
-
-  const stepCountLabel = useMemo(
-    () =>
-      `${state.steps.length} ${state.steps.length === 1 ? "etapa" : "etapas"}`,
-    [state.steps.length],
-  );
-  function updateState(update: Partial<AutomationState>) {
+  const [saved, setSaved] = useState(false);
+  const [testMode, setTestMode] = useState(false);
+  const [showErrors, setShowErrors] = useState(false);
+  const revision = useRef(0);
+  const draft = toDraft(state);
+  const issues = activationIssues(draft);
+  function updateState(update: Partial<EditorState>) {
+    revision.current++;
     setState((current) => ({ ...current, ...update }));
     setFeedback(null);
+    setSaved(false);
   }
-  function addKeyword(raw: string) {
-    const value = raw.normalize("NFKC").trim().replace(/\s+/gu, " ");
+  function addKeyword() {
+    const value = keywordInput.normalize("NFKC").trim().replace(/\s+/gu, " ");
     if (!value) return;
-    if (state.keywords.length >= 10) {
-      setFeedback({ type: "error", text: "Use no máximo 10 palavras-chave." });
+    if (state.keywords.length >= 10 || value.length > 40) {
+      setFeedback({
+        type: "error",
+        text: "Use até 10 palavras-chave de no máximo 40 caracteres.",
+      });
       return;
     }
     if (
@@ -168,44 +136,33 @@ export function AutomationEditor({
       });
       return;
     }
-    if (value.length > 40) {
-      setFeedback({
-        type: "error",
-        text: "Use no máximo 40 caracteres por palavra-chave.",
-      });
-      return;
-    }
     updateState({ keywords: [...state.keywords, value] });
     setKeywordInput("");
   }
-  function removeKeyword(keyword: string) {
-    updateState({
-      keywords: state.keywords.filter((value) => value !== keyword),
-    });
-  }
-  function addStep(kind: Step["kind"]) {
-    const step: Step =
-      kind === "SEND_DM"
-        ? { kind, text: "" }
+  function addStep(kind: AutomationStepDraft["kind"]) {
+    if (state.steps.length >= EDITOR_LIMITS.steps) return;
+    const editorKey = crypto.randomUUID();
+    const data: AutomationStepDraft =
+      kind === "SEND_DM" || kind === "BUTTONS"
+        ? { kind, ...emptyMessage() }
         : kind === "PUBLIC_REPLY"
           ? { kind, text: "" }
           : kind === "DELAY"
-            ? { kind, delaySeconds: 5 }
-            : kind === "ADD_TAG"
-              ? { kind, tagId: tags[0]?.id ?? "" }
-              : { kind, text: "", buttons: [{ label: "", url: "" }] };
-    setState((current) => ({ ...current, steps: [...current.steps, step] }));
-    setActiveStep(state.steps.length);
-    setFeedback(null);
+            ? { kind, delaySeconds: null }
+            : { kind, tagId: "" };
+    updateState({ steps: [...state.steps, { ...data, editorKey }] });
+    setActiveStep(editorKey);
   }
-  function updateStep(index: number, update: Partial<Step>) {
+  function updateStep(key: string, update: Partial<AutomationStepDraft>) {
+    revision.current++;
     setState((current) => ({
       ...current,
-      steps: current.steps.map((step, stepIndex) =>
-        stepIndex === index ? ({ ...step, ...update } as Step) : step,
+      steps: current.steps.map((step) =>
+        step.editorKey === key ? ({ ...step, ...update } as EditorStep) : step,
       ),
     }));
     setFeedback(null);
+    setSaved(false);
   }
   function moveStep(index: number, direction: -1 | 1) {
     const target = index + direction;
@@ -213,45 +170,53 @@ export function AutomationEditor({
     const steps = [...state.steps];
     [steps[index], steps[target]] = [steps[target], steps[index]];
     updateState({ steps });
-    setActiveStep(target);
   }
-  function removeStep(index: number) {
-    updateState({
-      steps: state.steps.filter((_, stepIndex) => stepIndex !== index),
-    });
-    setActiveStep(null);
-  }
-  function validate() {
-    const result = automationDraftSchema.safeParse(state);
-    return result.success ? null : result.error.issues[0].message;
+  function duplicateStep(index: number) {
+    if (state.steps.length >= EDITOR_LIMITS.steps) return;
+    const steps = [...state.steps];
+    const copy = {
+      ...structuredClone(steps[index]),
+      editorKey: crypto.randomUUID(),
+    };
+    steps.splice(index + 1, 0, copy);
+    updateState({ steps });
+    setActiveStep(copy.editorKey);
   }
   async function save() {
-    const issue = validate();
-    if (issue) {
-      setFeedback({ type: "error", text: issue });
+    const savingRevision = revision.current;
+    const result = automationDraftSchema.safeParse(draft);
+    if (!result.success) {
+      setFeedback({ type: "error", text: result.error.issues[0].message });
       return;
     }
     setPending(true);
     setFeedback(null);
     try {
       const response = await fetch(
-        visibleId ? `/api/automacoes/${visibleId}` : "/api/automacoes",
+        savedId ? "/api/automacoes/" + savedId : "/api/automacoes",
         {
-          method: visibleId ? "PATCH" : "POST",
+          method: savedId ? "PATCH" : "POST",
           headers: {
             "Content-Type": "application/json",
             Origin: window.location.origin,
           },
-          body: JSON.stringify(state),
+          body: JSON.stringify(result.data),
         },
       );
       const data = await response.json().catch(() => null);
       if (!response.ok)
         throw new Error(data?.error ?? "Não foi possível salvar o rascunho.");
       setSavedId(data.id);
-      setFeedback({ type: "success", text: "Rascunho salvo com segurança." });
-      if (!visibleId)
-        window.history.replaceState(null, "", `/automacoes/${data.id}`);
+      const currentVersionSaved = revision.current === savingRevision;
+      setSaved(currentVersionSaved);
+      setFeedback({
+        type: "success",
+        text: currentVersionSaved
+          ? "Rascunho salvo com segurança."
+          : "Rascunho salvo. Há alterações recentes ainda não salvas.",
+      });
+      if (!savedId)
+        window.history.replaceState(null, "", "/automacoes/" + data.id);
     } catch (reason) {
       setFeedback({
         type: "error",
@@ -265,15 +230,22 @@ export function AutomationEditor({
     }
   }
   function testFlow() {
-    const issue = validate();
-    setFeedback(
-      issue
-        ? { type: "error", text: issue }
-        : { type: "success", text: "O rascunho está pronto para uma revisão." },
-    );
-    setShowPreview(!issue);
+    setTestMode(true);
+    setShowErrors(true);
+    setFeedback({
+      type: "info",
+      text: "Simulação disponível na prévia da conversa. Você pode testar mesmo com campos incompletos.",
+    });
   }
-
+  function fieldIssue(path: string) {
+    const issue = showErrors
+      ? issues.find((item) => item.path === path)
+      : undefined;
+    return issue ? <p className="field-error">{issue.message}</p> : null;
+  }
+  const firstMessage = state.steps.findIndex(
+    (step) => step.kind === "SEND_DM" || step.kind === "BUTTONS",
+  );
   return (
     <>
       <div className="editor-topline">
@@ -282,17 +254,9 @@ export function AutomationEditor({
         </Link>
         <div className="editor-actions">
           <span className="draft-state">
-            {pending
-              ? "Salvando…"
-              : feedback?.type === "success"
-                ? "Salvo agora"
-                : "Rascunho"}
+            {pending ? "Salvando…" : saved ? "Salvo agora" : "Rascunho"}
           </span>
-          <button
-            className="button button-secondary"
-            onClick={testFlow}
-            disabled={pending}
-          >
+          <button className="button button-secondary" onClick={testFlow}>
             <WandSparkles size={16} /> Testar rascunho
           </button>
           <button
@@ -312,7 +276,9 @@ export function AutomationEditor({
       <div className="editor-heading">
         <div>
           <p className="eyebrow">EDITOR POR ETAPAS</p>
-          <h1>{automation ? "Editar automação" : "Nova automação"}</h1>
+          <h1>
+            {automation || savedId ? "Editar automação" : "Nova automação"}
+          </h1>
           <p className="page-description">
             Uma conversa clara começa com um gatilho bem definido.
           </p>
@@ -328,7 +294,7 @@ export function AutomationEditor({
       </div>
       {feedback ? (
         <div
-          className={`editor-feedback editor-feedback-${feedback.type}`}
+          className={"editor-feedback editor-feedback-" + feedback.type}
           role={feedback.type === "error" ? "alert" : "status"}
         >
           {feedback.text}
@@ -359,11 +325,15 @@ export function AutomationEditor({
                 id="automation-name"
                 value={state.name}
                 onChange={(event) => updateState({ name: event.target.value })}
-                placeholder="Ex.: Enviar catálogo"
+                placeholder="Dê um nome quando quiser"
                 maxLength={80}
               />
-              <span>{state.name.length}/80</span>
+              <span>{characterCount(state.name)}/80</span>
             </div>
+            {fieldIssue("name")}
+            <p className="editor-hint">
+              O nome é opcional enquanto você organiza o rascunho.
+            </p>
             <fieldset className="scope-options">
               <legend>Onde ela deve funcionar?</legend>
               <label className={state.scope === "GLOBAL" ? "selected" : ""}>
@@ -397,13 +367,8 @@ export function AutomationEditor({
                   type="radio"
                   name="scope"
                   checked={state.scope === "SPECIFIC_REELS"}
-                  onChange={() =>
-                    setFeedback({
-                      type: "info",
-                      text: "Conecte o Instagram para selecionar Reels específicos.",
-                    })
-                  }
                   disabled
+                  readOnly
                 />
                 <span>
                   <strong>
@@ -413,6 +378,7 @@ export function AutomationEditor({
                 </span>
               </label>
             </fieldset>
+            {fieldIssue("scope")}
           </section>
           <section className="card editor-section">
             <div className="editor-section-heading">
@@ -433,7 +399,7 @@ export function AutomationEditor({
                 onKeyDown={(event) => {
                   if (event.key === "Enter" || event.key === ",") {
                     event.preventDefault();
-                    addKeyword(keywordInput);
+                    addKeyword();
                   }
                 }}
                 placeholder="Digite e pressione Enter"
@@ -442,7 +408,7 @@ export function AutomationEditor({
               <button
                 className="button button-secondary"
                 type="button"
-                onClick={() => addKeyword(keywordInput)}
+                onClick={addKeyword}
               >
                 <Plus size={16} /> Adicionar
               </button>
@@ -457,8 +423,14 @@ export function AutomationEditor({
                     {keyword}
                     <button
                       type="button"
-                      aria-label={`Remover palavra-chave ${keyword}`}
-                      onClick={() => removeKeyword(keyword)}
+                      aria-label={"Remover palavra-chave " + keyword}
+                      onClick={() =>
+                        updateState({
+                          keywords: state.keywords.filter(
+                            (value) => value !== keyword,
+                          ),
+                        })
+                      }
                     >
                       <X size={13} />
                     </button>
@@ -467,10 +439,11 @@ export function AutomationEditor({
               </div>
             ) : (
               <p className="editor-hint">
-                Você pode adicionar até 10 palavras-chave. Ex.: quero, catálogo,
-                preço.
+                Você pode adicionar até 10 palavras-chave, quando estiver
+                pronto.
               </p>
             )}
+            {fieldIssue("keywords")}
           </section>
           <section className="card editor-section">
             <div className="editor-section-heading">
@@ -479,7 +452,10 @@ export function AutomationEditor({
                 <h2>Monte a conversa</h2>
                 <p>Adicione etapas na ordem em que devem acontecer.</p>
               </div>
-              <span className="step-count-badge">{stepCountLabel}</span>
+              <span className="step-count-badge">
+                {state.steps.length}{" "}
+                {state.steps.length === 1 ? "etapa" : "etapas"}
+              </span>
             </div>
             {state.steps.length === 0 ? (
               <div className="steps-empty">
@@ -490,14 +466,20 @@ export function AutomationEditor({
               <div className="editor-steps">
                 {state.steps.map((step, index) => (
                   <div
-                    className={`editor-step ${activeStep === index ? "is-active" : ""}`}
-                    key={`${step.kind}-${index}`}
+                    className={
+                      "editor-step " +
+                      (activeStep === step.editorKey ? "is-active" : "")
+                    }
+                    key={step.editorKey}
                   >
                     <button
                       className="step-summary"
                       type="button"
+                      aria-expanded={activeStep === step.editorKey}
                       onClick={() =>
-                        setActiveStep(activeStep === index ? null : index)
+                        setActiveStep(
+                          activeStep === step.editorKey ? null : step.editorKey,
+                        )
                       }
                     >
                       <span className="step-index">{index + 1}</span>
@@ -505,85 +487,95 @@ export function AutomationEditor({
                         <strong>{stepLabels[step.kind]}</strong>
                         <small>
                           {step.kind === "DELAY"
-                            ? `Aguardar ${displayDelay(step.delaySeconds)}`
+                            ? step.delaySeconds
+                              ? "Aguardar " + step.delaySeconds + "s"
+                              : "Defina o tempo de espera"
                             : step.kind === "ADD_TAG"
                               ? tags.find((tag) => tag.id === step.tagId)
                                   ?.name || "Escolha uma tag"
-                              : step.kind === "BUTTONS"
-                                ? `${step.buttons.length} ${step.buttons.length === 1 ? "botão" : "botões"}`
-                                : step.text || stepDescriptions[step.kind]}
+                              : step.text || "Conteúdo ainda vazio"}
                         </small>
                       </span>
                       <ArrowRight size={15} />
                     </button>
-                    {activeStep === index ? (
+                    {activeStep === step.editorKey ? (
                       <div className="step-editor">
-                        {step.kind === "SEND_DM" ||
-                        step.kind === "PUBLIC_REPLY" ? (
+                        {step.kind === "SEND_DM" || step.kind === "BUTTONS" ? (
+                          <AutomationMessageEditor
+                            message={step}
+                            path={"steps." + index}
+                            initial={index === firstMessage}
+                            showErrors={showErrors}
+                            onChange={(message) =>
+                              updateStep(step.editorKey, message)
+                            }
+                          />
+                        ) : step.kind === "PUBLIC_REPLY" ? (
                           <>
-                            <label htmlFor={`step-text-${index}`}>
-                              {step.kind === "SEND_DM"
-                                ? "Mensagem da DM"
-                                : "Resposta pública"}
+                            <label htmlFor={"step-text-" + index}>
+                              Resposta pública
                             </label>
                             <textarea
-                              id={`step-text-${index}`}
+                              id={"step-text-" + index}
                               value={step.text}
                               onChange={(event) =>
-                                updateStep(index, { text: event.target.value })
+                                updateStep(step.editorKey, {
+                                  text: event.target.value,
+                                })
                               }
-                              placeholder={
-                                step.kind === "SEND_DM"
-                                  ? "Oi! Vi que você comentou…"
-                                  : "Obrigado por comentar!"
-                              }
-                              maxLength={step.kind === "SEND_DM" ? 2000 : 500}
+                              placeholder="Escreva a resposta pública"
+                              maxLength={8000}
                             />
-                            <span className="textarea-count">
-                              {step.text.length}/
-                              {step.kind === "SEND_DM" ? 2000 : 500}
-                            </span>
+                            <p className="message-count">
+                              {characterCount(step.text)} caracteres ·{" "}
+                              {utf8Bytes(step.text)} bytes UTF-8
+                            </p>
+                            {fieldIssue("steps." + index + ".text")}
                           </>
                         ) : step.kind === "DELAY" ? (
                           <>
-                            <label htmlFor={`step-delay-${index}`}>
+                            <label htmlFor={"step-delay-" + index}>
                               Esperar antes da próxima etapa
                             </label>
                             <div className="delay-input">
                               <Clock3 size={17} />
                               <input
-                                id={`step-delay-${index}`}
+                                id={"step-delay-" + index}
                                 type="number"
                                 min={1}
                                 max={86400}
-                                value={step.delaySeconds}
+                                value={step.delaySeconds ?? ""}
+                                placeholder="Defina o tempo"
                                 onChange={(event) =>
-                                  updateStep(index, {
-                                    delaySeconds: Math.max(
-                                      1,
-                                      Number(event.target.value) || 1,
-                                    ),
+                                  updateStep(step.editorKey, {
+                                    delaySeconds:
+                                      event.target.value === ""
+                                        ? null
+                                        : Number(event.target.value),
                                   })
                                 }
                               />
                               <span>segundos</span>
                             </div>
+                            {fieldIssue("steps." + index + ".delaySeconds")}
                             <p className="editor-hint">
-                              O atraso será aplicado entre as etapas.
+                              O atraso não estende a janela de mensagens
+                              permitida pelo Instagram.
                             </p>
                           </>
-                        ) : step.kind === "ADD_TAG" ? (
+                        ) : (
                           <>
-                            <label htmlFor={`step-tag-${index}`}>
+                            <label htmlFor={"step-tag-" + index}>
                               Tag para adicionar
                             </label>
                             <select
-                              id={`step-tag-${index}`}
-                              value={step.tagId}
+                              id={"step-tag-" + index}
+                              value={step.tagId ?? ""}
                               onChange={(event) =>
-                                updateStep(index, { tagId: event.target.value })
+                                updateStep(step.editorKey, {
+                                  tagId: event.target.value,
+                                })
                               }
-                              disabled={!tags.length}
                             >
                               <option value="">
                                 {tags.length
@@ -596,103 +588,11 @@ export function AutomationEditor({
                                 </option>
                               ))}
                             </select>
+                            {fieldIssue("steps." + index + ".tagId")}
                             {!tags.length ? (
                               <Link href="/tags" className="editor-inline-link">
                                 Criar uma tag <ArrowRight size={13} />
                               </Link>
-                            ) : null}
-                          </>
-                        ) : (
-                          <>
-                            <label htmlFor={`step-buttons-text-${index}`}>
-                              Mensagem acima dos botões
-                            </label>
-                            <textarea
-                              id={`step-buttons-text-${index}`}
-                              value={step.text}
-                              onChange={(event) =>
-                                updateStep(index, { text: event.target.value })
-                              }
-                              placeholder="Escolha uma opção para continuar"
-                              maxLength={500}
-                            />
-                            <div className="button-fields">
-                              {step.buttons.map((button, buttonIndex) => (
-                                <div
-                                  className="button-field-row"
-                                  key={buttonIndex}
-                                >
-                                  <input
-                                    aria-label={`Texto do botão ${buttonIndex + 1}`}
-                                    value={button.label}
-                                    onChange={(event) =>
-                                      updateStep(index, {
-                                        buttons: step.buttons.map(
-                                          (item, itemIndex) =>
-                                            itemIndex === buttonIndex
-                                              ? {
-                                                  ...item,
-                                                  label: event.target.value,
-                                                }
-                                              : item,
-                                        ),
-                                      })
-                                    }
-                                    placeholder="Texto do botão"
-                                    maxLength={30}
-                                  />
-                                  <input
-                                    aria-label={`Link do botão ${buttonIndex + 1}`}
-                                    value={button.url}
-                                    onChange={(event) =>
-                                      updateStep(index, {
-                                        buttons: step.buttons.map(
-                                          (item, itemIndex) =>
-                                            itemIndex === buttonIndex
-                                              ? {
-                                                  ...item,
-                                                  url: event.target.value,
-                                                }
-                                              : item,
-                                        ),
-                                      })
-                                    }
-                                    placeholder="https://…"
-                                    maxLength={500}
-                                  />
-                                  <button
-                                    type="button"
-                                    className="icon-button danger-icon"
-                                    aria-label={`Remover botão ${buttonIndex + 1}`}
-                                    onClick={() =>
-                                      updateStep(index, {
-                                        buttons: step.buttons.filter(
-                                          (_, itemIndex) =>
-                                            itemIndex !== buttonIndex,
-                                        ),
-                                      })
-                                    }
-                                  >
-                                    <X size={15} />
-                                  </button>
-                                </div>
-                              ))}
-                            </div>
-                            {step.buttons.length < 3 ? (
-                              <button
-                                type="button"
-                                className="editor-add-button"
-                                onClick={() =>
-                                  updateStep(index, {
-                                    buttons: [
-                                      ...step.buttons,
-                                      { label: "", url: "" },
-                                    ],
-                                  })
-                                }
-                              >
-                                <Plus size={14} /> Adicionar botão
-                              </button>
                             ) : null}
                           </>
                         )}
@@ -717,8 +617,24 @@ export function AutomationEditor({
                           </button>
                           <button
                             type="button"
+                            className="icon-button"
+                            onClick={() => duplicateStep(index)}
+                            disabled={state.steps.length >= EDITOR_LIMITS.steps}
+                            aria-label="Duplicar mensagem ou etapa"
+                          >
+                            <Copy size={16} />
+                          </button>
+                          <button
+                            type="button"
                             className="icon-button danger-icon"
-                            onClick={() => removeStep(index)}
+                            onClick={() => {
+                              updateState({
+                                steps: state.steps.filter(
+                                  (item) => item.editorKey !== step.editorKey,
+                                ),
+                              });
+                              setActiveStep(null);
+                            }}
                             aria-label="Excluir etapa"
                           >
                             <Trash2 size={16} />
@@ -730,25 +646,35 @@ export function AutomationEditor({
                 ))}
               </div>
             )}
+            {fieldIssue("steps")}
             <div className="step-type-picker">
               <span>Adicionar etapa</span>
-              <button type="button" onClick={() => addStep("SEND_DM")}>
+              <button
+                type="button"
+                disabled={state.steps.length >= EDITOR_LIMITS.steps}
+                onClick={() => addStep("SEND_DM")}
+              >
                 <Send size={15} /> DM
-              </button>
-              <button type="button" onClick={() => addStep("BUTTONS")}>
-                <WandSparkles size={15} /> Botões
               </button>
               <button
                 type="button"
+                disabled={state.steps.length >= EDITOR_LIMITS.steps}
                 onClick={() => addStep("ADD_TAG")}
-                disabled={!tags.length}
               >
                 <Tag size={15} /> Tag
               </button>
-              <button type="button" onClick={() => addStep("DELAY")}>
+              <button
+                type="button"
+                disabled={state.steps.length >= EDITOR_LIMITS.steps}
+                onClick={() => addStep("DELAY")}
+              >
                 <Clock3 size={15} /> Atraso
               </button>
-              <button type="button" onClick={() => addStep("PUBLIC_REPLY")}>
+              <button
+                type="button"
+                disabled={state.steps.length >= EDITOR_LIMITS.steps}
+                onClick={() => addStep("PUBLIC_REPLY")}
+              >
                 <MessageCircle size={15} /> Resposta pública
               </button>
             </div>
@@ -766,9 +692,7 @@ export function AutomationEditor({
             </div>
             <div className="summary-row">
               <span>Escopo</span>
-              <strong>
-                {state.scope === "GLOBAL" ? "Global" : "Reels futuros"}
-              </strong>
+              <strong>{scopeLabels[state.scope]}</strong>
             </div>
             <div className="summary-row">
               <span>Gatilhos</span>
@@ -781,65 +705,34 @@ export function AutomationEditor({
             <div className="editor-sidebar-note">
               <MessageSquare size={16} />
               <p>
-                Esta etapa salva um rascunho. A conexão com o Instagram será
-                necessária para ativar a automação.
+                Você pode salvar campos incompletos. A conexão com o Instagram
+                será necessária para ativar a automação.
               </p>
             </div>
+            <button
+              className="editor-add-button"
+              type="button"
+              onClick={() => {
+                setShowErrors(true);
+                setTestMode(true);
+                setFeedback({
+                  type: "info",
+                  text: issues.length
+                    ? "Revise " +
+                      issues.length +
+                      " pendência(s) na prévia. O rascunho pode ser salvo."
+                    : "Campos completos. A ativação ainda depende da integração com o Instagram.",
+                });
+              }}
+            >
+              Verificar para ativação
+            </button>
           </section>
-          <section className="card editor-preview">
-            <div className="editor-summary-heading">
-              <MessageSquare size={18} />
-              <h2>Prévia da conversa</h2>
-            </div>
-            {showPreview && state.steps.length ? (
-              <div className="preview-messages">
-                {state.steps.map((step, index) => (
-                  <div
-                    className={`preview-message preview-${step.kind}`}
-                    key={index}
-                  >
-                    {step.kind === "DELAY" ? (
-                      <>
-                        <Clock3 size={14} /> Aguardar{" "}
-                        {displayDelay(step.delaySeconds)}
-                      </>
-                    ) : step.kind === "ADD_TAG" ? (
-                      <>
-                        <Tag size={14} /> Adicionar “
-                        {tags.find((tag) => tag.id === step.tagId)?.name ||
-                          "tag"}
-                        ”
-                      </>
-                    ) : step.kind === "BUTTONS" ? (
-                      <>
-                        <span>{step.text || "Mensagem com opções"}</span>
-                        <div>
-                          {step.buttons
-                            .filter((button) => button.label)
-                            .map((button) => (
-                              <small key={button.label}>{button.label}</small>
-                            ))}
-                        </div>
-                      </>
-                    ) : (
-                      step.text ||
-                      (step.kind === "SEND_DM"
-                        ? "Sua mensagem privada"
-                        : "Sua resposta pública")
-                    )}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="preview-placeholder">
-                <MessageSquare size={22} />
-                <p>
-                  Preencha as etapas e clique em testar para visualizar a
-                  sequência.
-                </p>
-              </div>
-            )}
-          </section>
+          <AutomationConversationPreview
+            draft={draft}
+            tags={tags}
+            testMode={testMode}
+          />
         </aside>
       </div>
     </>

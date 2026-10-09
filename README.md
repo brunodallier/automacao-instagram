@@ -2,7 +2,7 @@
 
 Base de uma plataforma privada de automações para Instagram, com interface em português do Brasil. Esta entrega cobre a fundação segura e o editor da Etapa 2.
 
-O proprietário pode entrar com segurança, organizar tags e criar rascunhos de automações com persistência em PostgreSQL. O editor sequencial reúne escopo, palavras-chave e etapas de DM, botões, tags, atrasos e respostas públicas, com prévia local antes de salvar. A integração Meta, OAuth, webhooks, filas e execução real continuam fora desta etapa.
+O proprietário pode entrar com segurança, organizar tags e criar rascunhos de automações com persistência em PostgreSQL. O editor sequencial reúne escopo, palavras-chave, mensagens com botões próprios, continuações, tags, atrasos e respostas públicas. A prévia interativa atualiza durante a edição e funciona antes de salvar. A integração Meta, OAuth, webhooks, filas e execução real continuam fora desta etapa.
 
 Repositório: [brunodallier/automacao-instagram](https://github.com/brunodallier/automacao-instagram).
 
@@ -132,7 +132,10 @@ npm start
 - Limite persistente de dez tentativas por e-mail em uma janela de quinze minutos, compartilhado entre processos. A mensagem de falha não revela se o usuário existe.
 - Painel com quatro métricas zeradas, estado de conexão e primeiros passos baseados na quantidade real de tags.
 - Automações: criação, edição, exclusão e persistência de rascunhos com escopo, palavras-chave, etapas ordenadas e prévia local.
-- A seleção de Reels específicos fica bloqueada até a conexão real com o Instagram; o backend rejeita esse escopo enquanto não houver Reels sincronizados.
+- Mensagens começam vazias, podem ser editadas, duplicadas e removidas; cada uma aceita até três botões com link HTTPS ou continuação subordinada ao clique.
+- Rascunhos incompletos podem ser salvos: nome, DM, URL, próxima mensagem, tag e atraso ainda podem estar em branco. Campos inválidos para ativação recebem avisos sem apagar seu conteúdo.
+- Prévia em tempo real, simulação de comentários por palavras-chave, cliques, retorno, reinício e apresentação de tags e atrasos sem executar ações reais.
+- A seleção de Reels específicos fica bloqueada até a conexão real com o Instagram. O backend preserva esse escopo em rascunhos incompletos e bloqueia sua ativação.
 - Tags: criação, listagem, busca, renomeação e exclusão confirmada, com validação no frontend e backend.
 - Nomes de tags com até cinquenta caracteres, espaços normalizados e unicidade por espaço sem distinção entre maiúsculas e minúsculas. Acentos continuam significativos.
 - A restrição única no PostgreSQL impede duplicação mesmo em gravações concorrentes. Renomear mantém o ID e a data de criação.
@@ -145,6 +148,10 @@ npm start
 O schema contém `User`, `Workspace`, `WorkspaceMembership`, `Tag`, `SocialAccount`, `LoginRateLimit`, `Automation`, `AutomationKeyword`, `AutomationStep` e `AutomationReel`. Contas sociais guardam somente metadados; não há campos de tokens da Meta nesta etapa.
 
 Cada consulta e mutação de tag obtém o workspace pela sessão validada no servidor. O cliente não escolhe um workspace. As mutações verificam a origem da solicitação e aceitam somente o formato validado. Os formulários do Auth.js usam a proteção CSRF da biblioteca.
+
+Automações usam a mesma autorização, incluindo a verificação de que tags selecionadas pertencem ao espaço. `Automation.nameIsProvisional` distingue o nome interno de um rascunho sem título do nome escolhido pelo usuário. A migration adiciona apenas essa coluna; nomes e registros anteriores são preservados.
+
+`AutomationStep.text` e o JSON `buttons` armazenam as mensagens e suas continuações. Botões guardam `action`, `url` e `nextMessage`; trocar a ação preserva o conteúdo da alternativa para que o usuário possa retornar. A etapa antiga `BUTTONS` e seus objetos `{ label, url }` continuam acessíveis. A leitura associa a ação `OPEN_URL` sem exigir regravação dos registros antigos.
 
 `WorkspaceMembership` prepara a separação de usuários e espaços futuros, mas não oferece cadastro, convite, seleção de workspace ou gestão multiusuário.
 
@@ -160,6 +167,8 @@ npm run build
 ```
 
 Os testes unitários cobrem validação de tags, normalização, limites, entradas extras, dados de login e hashing/verificação de senha.
+
+O editor acrescenta testes de rascunhos incompletos, contagem UTF-8, URLs HTTPS, continuações, compatibilidade antiga, janela de mensagens, validação para ativação e ausência de efeitos reais durante a simulação.
 
 Para integração, crie um banco separado:
 
@@ -211,7 +220,7 @@ src/
     globals.css             Tema, componentes e responsividade
   components/               Navegação, formulários e interface
   generated/prisma/         Cliente gerado; ignorado pelo Git
-  lib/                      Sessão, banco, validação, tags e contratos futuros
+  lib/                      Sessão, banco, validação, tags, rascunhos e regras de mensagens
   types/                    Tipos de sessão
 tests/
   unit/                     Validação e segurança de senhas
@@ -222,6 +231,10 @@ compose.yaml                PostgreSQL para desenvolvimento
 ```
 
 ## Próximas etapas
+
+As capacidades verificadas na documentação oficial e as pendências práticas estão em [docs/INSTAGRAM-MENSAGENS.md](docs/INSTAGRAM-MENSAGENS.md). O endpoint autenticado `POST /api/automacoes/:id/ativar` revisa o rascunho: retorna 400 para configurações incompletas/incompatíveis e 409 para fluxos completos enquanto a integração não estiver implementada. Ele mantém o status `DRAFT` e não envia mensagens.
+
+Para testar no navegador: abra Automações → Nova automação, adicione uma DM e escreva seu conteúdo. Use **Adicionar botão** dentro da mensagem e escolha uma ação. A prévia acompanha a edição; **Testar rascunho** libera um comentário fictício e a revisão das pendências. **Salvar rascunho** funciona mesmo antes de concluir os campos. Reabra pela listagem para continuar a edição.
 
 A próxima etapa deve conectar a conta Instagram pela Meta, sincronizar Reels e habilitar a seleção de Reels específicos. Depois disso, serão definidos OAuth, tokens, webhooks, processamento, limites oficiais de envio, ativação, filas e recuperação de falhas.
 

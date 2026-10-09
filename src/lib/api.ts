@@ -22,7 +22,9 @@ export async function readJson(request: Request) {
   }
 }
 
-function isApiError(error: unknown): error is { message: string; status: number } {
+function isApiError(
+  error: unknown,
+): error is { message: string; status: number } {
   return (
     typeof error === "object" &&
     error !== null &&
@@ -36,10 +38,17 @@ function isApiError(error: unknown): error is { message: string; status: number 
 export function apiError(error: unknown) {
   if (error instanceof TagError || isApiError(error))
     return NextResponse.json(
-      { error: error.message },
+      {
+        error: error.message,
+        ...(error instanceof Error && "issues" in error
+          ? { issues: error.issues }
+          : {}),
+      },
       { status: error.status },
     );
-  console.error("Falha em operação autenticada. Verifique a disponibilidade do banco.");
+  console.error(
+    "Falha em operação autenticada. Verifique a disponibilidade do banco.",
+  );
   return NextResponse.json(
     { error: "Não foi possível concluir. Tente novamente em instantes." },
     { status: 503 },
