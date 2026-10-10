@@ -45,42 +45,45 @@ export default async function Dashboard() {
   const tagCount = await db.tag.count({ where: { workspaceId: workspace.id } });
   return (
     <>
-      <PageHeading
-        eyebrow="VISÃO GERAL"
-        title="Painel principal"
-        description="Tudo no seu lugar. Acompanhe suas conexões e automações por aqui."
-        action={
-          <span className="stage-label">
-            <span /> Etapa 1 · Preparação
-          </span>
-        }
-      />
-      <div className="welcome-strip">
-        <div>
-          <span className="welcome-mark" aria-hidden="true">
-            01
-          </span>
-          <div>
-            <h2>Seu espaço está pronto para começar.</h2>
-            <p>Organize suas tags enquanto preparamos as próximas conexões.</p>
+      <div className="dashboard-overview">
+        <div className="dashboard-intro">
+          <PageHeading
+            eyebrow="VISÃO GERAL"
+            title="Painel principal"
+            description="Uma visão clara do seu espaço. No ritmo do seu negócio."
+          />
+          <div className="welcome-strip">
+            <div>
+              <div>
+                <span className="stage-label">
+                  <span /> Integração em preparação
+                </span>
+                <h2>O próximo passo começa com organização.</h2>
+                <p>
+                  Prepare suas tags e desenhe suas conversas. A conexão com o
+                  Instagram vem depois.
+                </p>
+              </div>
+            </div>
+            <Link href="/tags" className="button button-primary">
+              Criar minha primeira tag{" "}
+              <ArrowRight size={17} aria-hidden="true" />
+            </Link>
           </div>
         </div>
-        <Link href="/tags" className="button button-primary">
-          Criar minha primeira tag <ArrowRight size={17} aria-hidden="true" />
-        </Link>
-      </div>
-      <section className="metric-grid" aria-label="Métricas de automação">
-        {metrics.map(({ label, icon: Icon, description }) => (
-          <div className="metric-card" key={label}>
-            <div className="metric-top">
-              <span>{label}</span>
-              <Icon size={18} strokeWidth={1.6} aria-hidden="true" />
+        <section className="metric-grid" aria-label="Métricas de automação">
+          {metrics.map(({ label, icon: Icon, description }) => (
+            <div className="metric-card" key={label}>
+              <div className="metric-top">
+                <span>{label}</span>
+                <Icon size={18} strokeWidth={1.6} aria-hidden="true" />
+              </div>
+              <strong className="metric-value">0</strong>
+              <p>{description}</p>
             </div>
-            <strong className="metric-value">0</strong>
-            <p>{description}</p>
-          </div>
-        ))}
-      </section>
+          ))}
+        </section>
+      </div>
       <div className="dashboard-grid">
         <div className="dashboard-main">
           <section className="card connection-card">
@@ -119,8 +122,8 @@ export default async function Dashboard() {
             </div>
             <EmptyState
               icon={Workflow}
-              title="A primeira conversa vem em breve"
-              description="Suas automações aparecerão aqui quando o editor estiver disponível."
+              title="Cada conversa começa com uma ideia."
+              description="Crie e organize seus rascunhos na área de automações."
             />
             <div className="recent-table-labels" aria-hidden="true">
               <span>Nome da automação</span>

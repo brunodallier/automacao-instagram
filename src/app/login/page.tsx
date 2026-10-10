@@ -21,35 +21,33 @@ export default async function LoginPage() {
   return (
     <main className="login-page">
       <section className="login-story">
-        <Brand inverse />
+        <Brand />
         <span className="login-product-label">AUTOMAÇÃO INSTAGRAM</span>
         <div className="login-story-content">
-          <p className="eyebrow">MAIS CONVERSAS. MAIS CLAREZA.</p>
-          <h1>
-            Uma conexão.
+          <p className="eyebrow">CADA CONVERSA TEM SEU RITMO</p>
+          <h2>
+            Mais intenção.
             <br />
-            Muitas
-            <br />
-            <span>possibilidades.</span>
-          </h1>
+            Mais conversa<span className="brand-dot">.</span>
+          </h2>
           <p>
-            Um espaço simples para organizar suas automações e aproximar seu
-            negócio de cada conversa.
+            Organize suas automações com clareza. Um espaço para pensar cada
+            mensagem e cuidar do próximo passo.
           </p>
           <div className="login-story-steps">
             <span>
-              <MessageSquare size={16} /> Conversas
+              <MessageSquare size={16} /> Conversas bem pensadas
             </span>
             <span>
-              <Workflow size={16} /> Automações
+              <Workflow size={16} /> Um passo de cada vez
             </span>
             <span>
-              <Tag size={16} /> Organização
+              <Tag size={16} /> Organização do seu jeito
             </span>
           </div>
         </div>
         <div className="login-story-footer">
-          <span>Feito para dar o próximo passo.</span>
+          <span>Clareza para definir o próximo passo.</span>
           <ArrowUpRight size={20} aria-hidden="true" />
         </div>
       </section>
@@ -62,7 +60,11 @@ export default async function LoginPage() {
             <LockKeyhole size={23} strokeWidth={1.6} aria-hidden="true" />
           </span>
           <p className="eyebrow">SEU ESPAÇO, SEU ACESSO</p>
-          <h2>Bom ter você por aqui.</h2>
+          <h1>
+            Seu espaço,
+            <br />
+            no seu ritmo.
+          </h1>
           <p className="login-description">
             Entre para cuidar das suas próximas conversas.
           </p>
@@ -76,7 +78,7 @@ export default async function LoginPage() {
             </p>
           </div>
         </div>
-        <p className="login-footer">Elo · Automação Instagram</p>
+        <p className="login-footer">Pulso · Automação Instagram</p>
       </section>
     </main>
   );

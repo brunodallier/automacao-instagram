@@ -50,6 +50,232 @@ async function login(page: Page) {
   await expect(page).toHaveURL(/\/painel$/);
 }
 
+test("captura todas as telas do redesign em desktop e celular", async ({
+  page,
+}) => {
+  test.setTimeout(60000);
+  const set = process.env.PULSO_SCREENSHOT_SET ?? "after";
+  const isRedesign = set !== "before";
+  const tag = await client.tag.create({
+    data: {
+      workspaceId,
+      name: "Interesse no catálogo",
+      normalizedName: "interesse no catálogo",
+    },
+  });
+  const automation = await client.automation.create({
+    data: {
+      workspaceId,
+      name: "Catálogo por comentário",
+      publicReplies: {
+        enabled: true,
+        strategy: "ROTATING",
+        variations: [
+          "Obrigada pelo interesse. Vamos conversar por mensagem?",
+          "Seu comentário chegou. Podemos continuar no privado?",
+          "",
+          "",
+          "",
+        ],
+        fallback: {
+          enabled: true,
+          text: "Não foi possível enviar a mensagem. Entre em contato pelo Direct.",
+        },
+      },
+      keywords: {
+        create: [
+          { value: "catálogo", normalizedValue: "catálogo" },
+          { value: "quero", normalizedValue: "quero" },
+        ],
+      },
+      steps: {
+        create: [
+          {
+            position: 0,
+            kind: "SEND_DM",
+            text: "Obrigada pelo seu interesse. Podemos continuar por aqui?",
+            buttons: [],
+          },
+          {
+            position: 1,
+            kind: "BUTTONS",
+            text: "Escolha como prefere conhecer o catálogo.",
+            buttons: [
+              {
+                label: "Ver catálogo",
+                action: "OPEN_URL",
+                url: "https://example.com/catalogo",
+                nextMessage: null,
+              },
+              {
+                label: "Me conte mais",
+                action: "NEXT_MESSAGE",
+                url: "",
+                nextMessage: {
+                  format: "TEXT",
+                  text: "Qual produto chamou sua atenção?",
+                  buttons: [],
+                },
+              },
+            ],
+          },
+          { position: 2, kind: "ADD_TAG", tagId: tag.id },
+          { position: 3, kind: "DELAY", delaySeconds: 30 },
+        ],
+      },
+    },
+  });
+  for (const [device, width, height] of [
+    ["desktop", 1440, 1000],
+    ["mobile", 390, 844],
+  ] as const) {
+    await page.setViewportSize({ width, height });
+    await page.goto("/login");
+    await expect(
+      page.getByRole("button", { name: "Entrar no meu espaço" }),
+    ).toBeVisible();
+    await page.evaluate(() => document.fonts.ready.then(() => undefined));
+    if (isRedesign) {
+      await expect(page).toHaveTitle("Entrar · Pulso");
+      await expect(page.locator(".brand:visible")).toHaveText("pulso.");
+      await expect(page.locator('link[rel="icon"]')).toHaveAttribute(
+        "href",
+        /icon\.svg/,
+      );
+    }
+    await page.screenshot({
+      path: `.tmp/pulso-${set}/login-${device}.png`,
+      fullPage: true,
+    });
+  }
+  await login(page);
+  for (const [device, width, height] of [
+    ["desktop", 1440, 1000],
+    ["mobile", 390, 844],
+  ] as const) {
+    await page.setViewportSize({ width, height });
+    for (const [name, route, heading] of [
+      ["dashboard", "/painel", "Painel principal"],
+      ["automacoes", "/automacoes", "Automações"],
+      ["editor", `/automacoes/${automation.id}`, "Editar automação"],
+      ["tags", "/tags", "Tags"],
+      ["saude", "/saude", "Saúde do sistema"],
+      ["configuracoes", "/configuracoes", "Configurações"],
+    ]) {
+      await page.goto(route);
+      await expect(
+        page.getByRole("heading", { level: 1, name: heading, exact: true }),
+      ).toBeVisible();
+      await expect(page.locator(".loading-page")).toHaveCount(0);
+      await page.evaluate(() => document.fonts.ready.then(() => undefined));
+      if (isRedesign) {
+        await expect(page).toHaveTitle(/ · Pulso$/);
+        await expect(page.locator(".page-footer")).toContainText("Pulso");
+        await expect(page.locator(".nav-soon")).toHaveCount(0);
+        const contrast = await page.evaluate(() => {
+          const luminance = (color: string) => {
+            const rgb = color
+              .match(/[\d.]+/g)!
+              .slice(0, 3)
+              .map(Number)
+              .map((value) => {
+                const c = value / 255;
+                return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+              });
+            return rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722;
+          };
+          const visible = (element: HTMLElement) =>
+            element.getBoundingClientRect().width &&
+            !element.matches(":disabled");
+          const ratio = (element: HTMLElement, foreground: string) => {
+            let parent: HTMLElement | null = element;
+            let background = "rgb(255, 255, 255)";
+            while (parent) {
+              const bg = getComputedStyle(parent).backgroundColor;
+              if (bg !== "rgba(0, 0, 0, 0)") {
+                background = bg;
+                break;
+              }
+              parent = parent.parentElement;
+            }
+            const a = luminance(foreground),
+              b = luminance(background);
+            return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+          };
+          return {
+            text: [
+              ...document.querySelectorAll<HTMLElement>(
+                ".page-description, .editor-hint, .badge, .button-primary, .muted, .field-hint",
+              ),
+            ]
+              .filter(visible)
+              .map((element) => ratio(element, getComputedStyle(element).color)),
+            fields: [
+              ...document.querySelectorAll<HTMLElement>(
+                'input:not([type="checkbox"]):not([type="radio"]), select, textarea',
+              ),
+            ]
+              .filter(visible)
+              .map((element) =>
+                ratio(element, getComputedStyle(element).borderTopColor),
+              ),
+          };
+        });
+        expect(contrast.text.length).toBeGreaterThan(0);
+        expect(Math.min(...contrast.text)).toBeGreaterThanOrEqual(4.5);
+        if (contrast.fields.length)
+          expect(Math.min(...contrast.fields)).toBeGreaterThanOrEqual(3);
+      }
+      if (name === "editor") await page.locator(".step-summary").nth(1).click();
+      if (isRedesign) {
+        const fieldHeights = await page
+          .locator(
+            'input:not([type="checkbox"]):not([type="radio"]), select, textarea',
+          )
+          .evaluateAll((elements) =>
+            elements
+              .filter((element) =>
+                element.getBoundingClientRect().width &&
+                !element.matches(":disabled"),
+              )
+              .map((element) => element.getBoundingClientRect().height),
+          );
+        if (fieldHeights.length)
+          expect(Math.min(...fieldHeights)).toBeGreaterThanOrEqual(36);
+      }
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= window.innerWidth,
+        ),
+      ).toBe(true);
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await page.screenshot({
+        path: `.tmp/pulso-${set}/${name}-${device}.png`,
+        fullPage: true,
+      });
+      if (name === "editor") {
+        await page.screenshot({
+          path: `.tmp/pulso-${set}/editor-inicio-${device}.png`,
+        });
+        await page.evaluate(() => {
+          const section = document.querySelector(".public-reply-section")!;
+          window.scrollTo(0, section.getBoundingClientRect().top + window.scrollY - 88);
+        });
+        await page.screenshot({
+          path: `.tmp/pulso-${set}/respostas-publicas-${device}.png`,
+        });
+        await page
+          .locator(".message-button-card")
+          .first()
+          .scrollIntoViewIfNeeded();
+        await page.screenshot({
+          path: `.tmp/pulso-${set}/botoes-${device}.png`,
+        });
+      }
+    }
+  }
+});
+
 test("organiza quatro etapas, edita respostas públicas e simula somente falha definitiva", async ({
   page,
 }) => {

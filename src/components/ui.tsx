@@ -3,12 +3,8 @@ import type { LucideIcon } from "lucide-react";
 export function Brand({ inverse = false }: { inverse?: boolean }) {
   return (
     <span className={`brand ${inverse ? "brand-inverse" : ""}`}>
-      <span className="brand-symbol" aria-hidden="true">
-        <span />
-        <span />
-      </span>
       <span>
-        elo<span className="brand-dot">.</span>
+        pulso<span className="brand-dot">.</span>
       </span>
     </span>
   );

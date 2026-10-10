@@ -62,9 +62,6 @@ function Navigation({ onNavigate }: { onNavigate?: () => void }) {
         >
           <Icon size={19} strokeWidth={1.7} aria-hidden="true" />
           <span>{label}</span>
-          {href === "/automacoes" ? (
-            <span className="nav-soon">Em breve</span>
-          ) : null}
         </Link>
       ))}
     </nav>
@@ -98,7 +95,7 @@ export function AppShell({
         <Link
           href="/painel"
           className="brand-link"
-          aria-label="Elo, painel principal"
+          aria-label="Pulso, painel principal"
         >
           <Brand />
           <span className="brand-caption">AUTOMAÇÃO INSTAGRAM</span>
@@ -168,7 +165,7 @@ export function AppShell({
         <main id="conteudo" className="main-content">
           {children}
           <footer className="page-footer">
-            <span>Elo · Seu espaço de automação</span>
+            <span>Pulso · Seu espaço de automação</span>
             <span>
               Base da plataforma <span className="footer-version">01</span>
             </span>

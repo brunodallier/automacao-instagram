@@ -1,10 +1,12 @@
-# Elo · Automação Instagram
+# Pulso · Automação Instagram
 
 Base de uma plataforma privada de automações para Instagram, com interface em português do Brasil. Esta entrega cobre a fundação segura e o editor da Etapa 2.
 
 O proprietário pode entrar com segurança, organizar tags e criar rascunhos de automações com persistência em PostgreSQL. O editor tem quatro etapas de configuração: definição e escopo, palavras-chave, respostas públicas e conversa privada. As respostas públicas têm cinco campos inicialmente vazios, variações adicionais em rotação e uma alternativa opcional para falha definitiva da DM. Os botões da conversa têm configuração compacta e podem ser recolhidos quando completos. A prévia interativa atualiza durante a edição e funciona antes de salvar. A integração Meta, OAuth, webhooks, filas e execução real continuam fora desta etapa.
 
 Repositório: [brunodallier/automacao-instagram](https://github.com/brunodallier/automacao-instagram).
+
+A identidade **pulso.** usa uma composição editorial sobre fundo branco: métricas independentes, separação por espaço em branco e superfícies discretas apenas onde há agrupamento útil. Login, painel, automações, editor, tags, saúde e configurações compartilham os mesmos tokens. O editor mantém suas quatro etapas e os campos compactos. Consulte [o design system](docs/DESIGN-SYSTEM.md) e [o registro de validação](docs/VALIDACAO.md).
 
 ## Tecnologias
 
@@ -14,7 +16,7 @@ Repositório: [brunodallier/automacao-instagram](https://github.com/brunodallier
 - Auth.js, na versão estável `next-auth` 4.24.15, com Credentials e sessões JWT criptografadas.
 - Zod para validação no navegador e no servidor.
 - Vitest para testes unitários e de integração; Playwright para testes de navegador.
-- Fontes DM Sans e Manrope instaladas localmente, sem depender do Google Fonts em execução ou no build.
+- Inter Tight para títulos e Inter para a interface, ambas com licença OFL 1.1, instaladas localmente sem depender do Google Fonts em execução ou no build.
 
 As versões resolvidas estão fixadas no `package-lock.json`. Prisma 8 e Auth.js 5 ainda eram versões de pré-lançamento na consulta realizada para esta entrega, por isso não foram adotados.
 
@@ -188,9 +190,11 @@ Os testes recusam um banco sem `test` no nome ou uma URL igual à da aplicação
 
 - Integração: PostgreSQL real, persistência em outra conexão, concorrência, renomeação com ID preservado, duplicidade, validação e isolamento entre workspaces, além da sequência de palavras-chave e etapas das automações.
 - Navegador: login, proteção das páginas e APIs, CRUD de tags, editor sequencial de automações, prévia do rascunho, recarregamento, confirmação/cancelamento da exclusão, bloqueio de origem externa, isolamento, navegação móvel, cookie HttpOnly, limite de oito horas, logout, revogação de sessão e limite de tentativas.
+- Redesign: marca Pulso, favicon, telas carregadas no desktop e no celular, ausência de rolagem horizontal e contraste dos textos e controles principais. O teste aguarda o conteúdo e as fontes antes de capturar as telas.
 - O navegador executa a versão de produção na porta 3100. Rode `npm run build` antes dos testes e mantenha essa porta livre.
 - Credenciais de teste são aleatórias, temporárias e não são disponibilizadas como login da aplicação.
 - Capturas locais em `test-results/` e traces de falhas não são versionados.
+- Capturas do redesign ficam em `.tmp/pulso-after/`; as capturas anteriores disponíveis ficam em `.tmp/pulso-before/`. Esses diretórios são locais e ignorados pelo Git. Para recriar as capturas atuais após o build, use `npm run test:e2e -- --grep "captura todas as telas"`.
 
 Sem `TEST_DATABASE_URL` ou PostgreSQL acessível, os testes de integração/navegador falham com instrução de configuração; não são apresentados como aprovados.
 
