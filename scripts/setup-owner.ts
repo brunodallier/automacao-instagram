@@ -1,8 +1,9 @@
 import "dotenv/config";
-import { input, password } from "@inquirer/prompts";
+import { input } from "@inquirer/prompts";
 import { db } from "../src/lib/db";
 import { ownerSchema } from "../src/lib/validation";
 import { configureFirstOwner } from "../src/lib/bootstrap-owner";
+import { promptOwnerPassword } from "./owner-password-prompt";
 
 async function main() {
   if (await db.user.count())
@@ -13,21 +14,13 @@ async function main() {
     name: await input({ message: "Nome do proprietário:" }),
     email: await input({ message: "E-mail:" }),
     workspaceName: await input({ message: "Nome do espaço de trabalho:" }),
-    password: await password({
-      message: "Senha (mínimo 12 caracteres):",
-      mask: "*",
-    }),
+    password: (await promptOwnerPassword("Senha:", "Confirme a senha:"))
+      .password,
   });
   if (!result.success)
     throw new Error(
       result.error.issues.map((issue) => issue.message).join("\n"),
     );
-  const confirmation = await password({
-    message: "Confirme a senha:",
-    mask: "*",
-  });
-  if (confirmation !== result.data.password)
-    throw new Error("As senhas não coincidem.");
   await configureFirstOwner(db, result.data);
   console.log(
     "Proprietário criado. Acesse /login. Nenhuma tag foi pré-cadastrada.",

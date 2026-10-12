@@ -3,6 +3,7 @@ import { test, expect, type Page } from "@playwright/test";
 import { createDatabaseClient } from "../../src/lib/db";
 import { hashPassword } from "../../src/lib/password";
 import { encode } from "next-auth/jwt";
+import { resetOwnerPassword } from "../../src/lib/reset-owner-password";
 
 const client = createDatabaseClient(process.env.DATABASE_URL!);
 const email = `e2e-${randomUUID()}@example.com`;
@@ -1282,6 +1283,32 @@ test("salva prévias da interface desktop e mobile", async ({ page }) => {
     path: "test-results/painel-mobile.png",
     fullPage: true,
   });
+});
+
+test("mantém login antigo acima de 14 caracteres e revoga acesso após redefinir", async ({
+  page,
+}) => {
+  expect(password.length).toBeGreaterThan(14);
+  await login(page);
+  const replacement = `Aa1!${randomUUID().replaceAll("-", "").slice(0, 2)}`;
+  await resetOwnerPassword(client, email, {
+    password: replacement,
+    confirmation: replacement,
+  });
+  await page.goto("/tags");
+  await expect(page).toHaveURL(/\/login$/);
+  expect((await page.request.get("/api/tags")).status()).toBe(401);
+  await page.getByLabel("E-mail", { exact: true }).fill(email);
+  await page.getByLabel("Senha", { exact: true }).fill(password);
+  await page.getByRole("button", { name: "Entrar no meu espaço" }).click();
+  await expect(page.locator(".login-error")).toContainText(
+    "Não foi possível entrar.",
+  );
+  await expect(page).toHaveURL(/\/login$/);
+  await page.getByLabel("Senha", { exact: true }).fill(replacement);
+  await page.getByRole("button", { name: "Entrar no meu espaço" }).click();
+  await expect(page).toHaveURL(/\/painel$/);
+  expect((await page.request.get("/api/tags")).status()).toBe(200);
 });
 
 test("revoga a sessão quando a versão de segurança muda", async ({ page }) => {

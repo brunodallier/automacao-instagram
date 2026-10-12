@@ -1,4 +1,27 @@
-# Validação da plataforma Pulso e do redesign
+# Validação da plataforma Pulso
+
+## Política de senhas — 12 de outubro de 2026
+
+A criação e a redefinição usam a mesma validação: 6–14 caracteres, maiúscula, minúscula, número e pontuação/símbolo, todos obrigatórios. Espaços não satisfazem o requisito de caractere especial. Senhas não são aparadas nem normalizadas; a confirmação deve ser idêntica.
+
+| Verificação | Resultado |
+| --- | --- |
+| `npm test` | 58 testes unitários aprovados |
+| `npm run test:integration` | 23 testes aprovados em PostgreSQL real |
+| `npm run test:e2e` | 22 testes aprovados em Chromium, usando build de produção |
+| `npm run typecheck` | Aprovado |
+| `npm run lint` | Aprovado, sem erros ou avisos |
+| `npm run build` | Aprovado |
+
+Os testes cobrem senhas válidas nos dois limites, tamanho insuficiente/excessivo, ausência de cada categoria, acentos/símbolos Unicode, confirmação divergente, instruções do terminal, máscara nas duas entradas e mensagens sem a senha digitada. A integração confirma que entradas recusadas não alteram o usuário; redefinições válidas atualizam hash e versão de sessão na mesma operação, preservando identidade, associação ao workspace e dados do espaço.
+
+O login conserva a validação anterior de 1–128 caracteres, sem exigir a nova composição. O navegador confirmou login real com senha antiga acima de 14 caracteres, recusa da sessão e da senha antigas após a redefinição de teste e acesso com a senha nova de 6 caracteres. Scrypt, salt aleatório, comparação segura, limite de tentativas, duração e revogação das sessões permanecem preservados. Não houve alteração de schema, migrations, dependências, interface ou automações.
+
+O comando de redefinição não foi executado no banco da aplicação. Os testes usam exclusivamente contas temporárias no banco separado. Antes dos testes foi registrado um snapshot local de contagens e digests das dez tabelas de dados e do histórico de migrations, sem credenciais ou hashes individuais de senha. A comparação confirmou igualdade completa, inclusive do proprietário, seu hash e sua versão de sessão. O histórico mantém as cinco migrations existentes.
+
+Para redefinir sua senha posteriormente, siga [as instruções do README](../README.md#primeiro-proprietário) e execute `npm run owner:password` diretamente no terminal. Nenhuma senha real deve ser enviada pelo chat ou inserida em argumentos de comandos.
+
+## Redesign — 9 de outubro de 2026
 
 Verificações realizadas em 9 de outubro de 2026, no Windows, com Node.js 24.14.1.
 

@@ -100,7 +100,14 @@ Após aplicar as migrations:
 npm run owner:setup
 ```
 
-O assistente solicita nome, e-mail, nome do espaço, senha e confirmação. A senha é mascarada no terminal, deve ter de 12 a 128 caracteres e é armazenada com scrypt, salt aleatório e parâmetros `N=32768, r=8, p=1`.
+O assistente solicita nome, e-mail, nome do espaço, senha e confirmação. A senha é mascarada no terminal e deve atender simultaneamente a estes requisitos:
+
+- De **6 a 14 caracteres**.
+- Pelo menos uma letra maiúscula e uma letra minúscula.
+- Pelo menos um número.
+- Pelo menos um caractere especial: pontuação ou símbolo. Espaços não satisfazem esse requisito.
+
+A validação reconhece caracteres Unicode, não apara nem normaliza a senha e conta cada ponto de código como um caractere. O armazenamento continua usando scrypt, salt aleatório e parâmetros `N=32768, r=8, p=1`.
 
 A criação é feita em uma transação com trava PostgreSQL. Depois que o primeiro usuário existe, o comando recusa criar outro. Não há página ou endpoint de cadastro público, credencial padrão ou tags pré-cadastradas.
 
@@ -110,7 +117,9 @@ Para recuperar ou alterar a senha pela instalação:
 npm run owner:password
 ```
 
-As sessões anteriores deixam de ter acesso às páginas privadas e à API após a alteração. Quem controla o terminal e a conexão do banco controla esse procedimento.
+Na pasta do projeto, execute o comando no seu terminal, informe o e-mail do proprietário e digite a nova senha. O comando apresenta os requisitos, mascara a entrada e informa quais critérios faltam, permitindo corrigir a senha antes de prosseguir. Repita a mesma senha na confirmação. Depois da gravação, as sessões anteriores deixam de ter acesso às páginas privadas e à API; entre novamente com a nova senha.
+
+A política nova vale somente para criação e redefinição. Senhas antigas, inclusive maiores que 14 caracteres, continuam aceitas no login dentro do limite anterior de 128 caracteres até serem redefinidas. Atualizar o código não altera a senha nem recria o proprietário. Não compartilhe sua senha no chat, em comandos com argumentos, arquivos ou logs. Quem controla o terminal e a conexão do banco controla esse procedimento.
 
 ## Executar localmente
 
@@ -168,7 +177,7 @@ npm run lint
 npm run build
 ```
 
-Os testes unitários cobrem validação de tags, normalização, limites, entradas extras, dados de login e hashing/verificação de senha.
+Os testes unitários cobrem validação de tags, normalização, limites, entradas extras, dados de login e hashing/verificação de senha. A política de senhas cobre os limites de 6/14 caracteres, ausência de cada requisito, confirmação idêntica, mensagens seguras e entrada mascarada. Integração verifica criação/redefinição apenas no banco de testes, preservação da conta em erros e revogação de sessões. No navegador, uma senha antiga maior que 14 caracteres entra normalmente; depois de uma redefinição de teste, a sessão e a senha antigas deixam de dar acesso, e a senha nova funciona.
 
 O editor acrescenta testes de rascunhos incompletos, contagem UTF-8, URLs HTTPS, continuações, compatibilidade antiga, janela de mensagens, validação para ativação e ausência de efeitos reais durante a simulação. A revisão de organização cobre a migração aditiva das respostas públicas, os controles independentes de ativação e alternativa, a rotação das variações e os botões compactos/recolhidos no celular.
 
