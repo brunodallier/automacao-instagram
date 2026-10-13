@@ -1,0 +1,17 @@
+{$PULSO_DOMAIN} {
+  encode zstd gzip
+  log {
+    output stdout
+    format filter {
+      wrap json
+      fields {
+        request>headers delete
+        request>uri delete
+        resp_headers delete
+      }
+    }
+  }
+  @health path /api/health/*
+  respond @health 404
+  reverse_proxy web:3000
+}

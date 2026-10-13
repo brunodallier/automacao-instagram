@@ -6,6 +6,8 @@ O proprietário pode entrar com segurança, organizar tags e criar rascunhos de 
 
 Repositório: [brunodallier/automacao-instagram](https://github.com/brunodallier/automacao-instagram).
 
+A preparação Docker de produção para a **Hostinger KVM 2** está descrita em [HOSTINGER-DOCKER.md](docs/HOSTINGER-DOCKER.md): Next.js standalone, PostgreSQL UTF8 persistente, Caddy/HTTPS, worker em espera e backups externos criptografados. O arquivo de produção é separado do Compose e do banco usados no localhost. A implantação remota depende de uma etapa posterior autorizada.
+
 A identidade **pulso.** usa uma composição editorial sobre fundo branco: métricas independentes, separação por espaço em branco e superfícies discretas apenas onde há agrupamento útil. Login, painel, automações, editor, tags, saúde e configurações compartilham os mesmos tokens. O editor mantém suas quatro etapas e os campos compactos. Consulte [o design system](docs/DESIGN-SYSTEM.md) e [o registro de validação](docs/VALIDACAO.md).
 
 ## Tecnologias

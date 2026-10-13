@@ -20,3 +20,9 @@ Thumbs.db
 .vscode/
 *.pem
 *.key
+deploy/secrets/
+deploy/backups/
+deploy/production.env
+*.dump
+*.sql.gz
+*.private

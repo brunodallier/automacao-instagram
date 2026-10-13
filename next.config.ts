@@ -1,6 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Docker builds opt in; local development/build workflows remain unchanged.
+  ...(process.env.PULSO_STANDALONE === "1"
+    ? { output: "standalone" as const, experimental: { cpus: 2 } }
+    : {}),
   poweredByHeader: false,
   async headers() {
     return [

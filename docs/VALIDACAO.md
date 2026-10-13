@@ -138,3 +138,32 @@ Os novos casos verificam a ordem das quatro seções, cinco respostas inicialmen
 Rascunhos antigos com blocos públicos foram reabertos e salvos na etapa própria, mantendo a DM e seus botões. Atualizações que omitem a nova configuração foram verificadas para não apagar as respostas; clientes antigos que ainda enviam blocos públicos preservam os controles, a alternativa e as variações adicionais. Em mobile, os campos dos botões têm 36 px de altura, recolher reduz o contêiner a menos da metade e as ações de URL/continuação funcionam recolhidas. Expandir, editar, remover um botão anterior, salvar e reabrir mantêm a continuação. Não houve rolagem horizontal a 390 px.
 
 OAuth da Meta, sincronização de Reels, webhooks, filas e motor de execução permanecem fora desta entrega. O editor salvo nesta etapa trabalha com rascunhos e prévia local.
+## Preparação Docker / Hostinger — 13 de outubro de 2026
+
+Produção foi preparada em um Compose separado: Next.js standalone com usuário sem privilégios, PostgreSQL 18.6 UTF8 persistente, Caddy 2.11.2, worker contínuo em standby e perfil de backup com Restic 0.19.1. Não houve implantação remota, mudança da interface, webhooks ou envio real. O Compose de desenvolvimento e `.env` existente foram preservados.
+
+| Verificação | Resultado |
+| --- | --- |
+| Testes unitários | 102 aprovados |
+| Testes de runtime/secrets | 4 aprovados |
+| Integração PostgreSQL | 29 aprovados em banco exclusivo de testes |
+| Navegador Chromium | 24 aprovados |
+| TypeScript e lint | Aprovados |
+| Build Windows e build Linux Docker | Aprovados |
+| Auditoria de dependências de produção | Sem vulnerabilidades reportadas |
+| Ensaio Docker com cópia real | Aprovado, incluindo backup criptografado e restauração integral |
+| Ensaio Docker com banco vazio | Aprovado: seis migrations, proprietário temporário, HTTPS, Unicode e recuperação |
+
+Docker Desktop não conseguiu inicializar neste PC; os testes foram executados com Docker Engine 29.1.3 / Compose 2.40.3 em Ubuntu 24.04 no WSL2. Foram usados projetos e volumes aleatórios, credenciais descartáveis, portas livres em loopback e token Instagram vazio. O teste não usa `.env`, não consulta a Meta e remove somente seus recursos ao concluir. O banco original não é acessado por esses containers.
+
+Um dump completo oficial, privado e verificado do banco atual foi restaurado no primeiro PostgreSQL de teste. As seis migrations ficaram registradas sem reaplicação. Foram verificados HTTPS com CA local confiada somente pelo cliente de teste, sessão autenticada com JWT temporário do ambiente descartável, APIs protegidas, leitura dos Reels, acesso à tela de Reels e criação/remoção de tag com acento, emoji e ideogramas. A senha real não foi solicitada ou redefinida; os registros do usuário, hash e versão de sessão foram comparados por digest junto às demais tabelas.
+
+O teste confirmou limites de recursos, usuário sem privilégios/filesystem readonly da aplicação, ausência do token no worker, heartbeat standby, reinício automático após encerrar o processo do worker e persistência após reiniciar PostgreSQL. Foi realizado dump com `pg_dump`, validação com `pg_restore --list`, backup Restic criptografado, leitura integral do repositório, recuperação com SHA256 e restauração em segundo banco vazio. Contagens e digests de **todas as 12 tabelas** coincidiram entre os dois bancos: 87 Reels, duas automações e um proprietário.
+
+O repositório Restic do teste era um volume local descartável; nenhum bucket externo foi configurado. DNS real, certificado público ACME, acessos SSH/firewall e conectividade do armazenamento externo deverão ser validados na implantação autorizada. Não houve teste de capacidade de envios: o worker ainda não executa automações. Imagens locais finais: aproximadamente 95 MB (web/worker), 540 MB (tools/migrations) e 163 MB (backup). O limite agregado dos serviços permanentes com backup é 4,25 GiB; consumo real depende do uso e deve ser monitorado.
+
+A auditoria completa mantém cinco alertas preexistentes na cadeia de desenvolvimento do ESLint (`braces`/`micromatch`/`fast-glob`); eles não aparecem em `npm audit --omit=dev`. Dependências não foram alteradas nesta entrega. Não foi executado `npm audit fix --force` ou downgrade do Next.js.
+
+O snapshot somente de leitura do banco original confirmou igualdade de registros, schema, constraints, índices, grants, sequences e migrations antes/depois: 12 tabelas, seis migrations e 11 relacionamentos. Backup privado adicional do ensaio foi guardado fora do Git em `C:\Users\bruno\.codex\backups\pulso\20261012-utf8\docker-isolated-20261013.dump`. O banco original e os backups anteriores continuam disponíveis.
+
+Procedimentos, limitações e próximos passos: [HOSTINGER-DOCKER.md](HOSTINGER-DOCKER.md).

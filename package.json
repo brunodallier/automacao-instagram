@@ -13,6 +13,8 @@
     "lint": "eslint . --max-warnings=0",
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
+    "test:runtime": "node --test tests/runtime/*.test.mjs",
+    "test:docker": "node tests/docker/smoke.mjs",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:e2e": "tsx scripts/test-e2e.ts",
     "db:generate": "prisma generate",
