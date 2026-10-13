@@ -12,3 +12,12 @@ export type AutomationSummary = {
 
 // Regra de domínio a preservar na implementação futura:
 // SPECIFIC_REELS tem prioridade sobre GLOBAL para o mesmo Reel.
+// The future engine must first filter workspace, account, Reel and keyword eligibility.
+export function prioritizeEligibleAutomations<
+  T extends { scope: AutomationScope },
+>(eligible: T[]): T[] {
+  const specific = eligible.filter(
+    (automation) => automation.scope === "SPECIFIC_REELS",
+  );
+  return specific.length ? specific : eligible;
+}

@@ -135,6 +135,20 @@ const draftObjectSchema = z
   .object({
     name: z.string().max(80, "Use no máximo 80 caracteres no nome."),
     scope: automationScopeSchema,
+    reelIds: z
+      .array(
+        z
+          .string()
+          .min(1)
+          .max(100)
+          .regex(/^[a-zA-Z0-9_-]+$/),
+      )
+      .max(1000)
+      .refine(
+        (ids) => new Set(ids).size === ids.length,
+        "Os Reels selecionados não podem se repetir.",
+      )
+      .optional(),
     keywords: z
       .array(
         z

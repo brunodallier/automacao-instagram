@@ -100,7 +100,7 @@ export function activationIssues(draft: AutomationDraft): DraftIssue[] {
       path: "keywords",
       message: "Adicione pelo menos uma palavra-chave antes de ativar.",
     });
-  if (draft.scope === "SPECIFIC_REELS")
+  if (draft.scope === "SPECIFIC_REELS" && !draft.reelIds?.length)
     issues.push({
       path: "scope",
       message: "Conecte o Instagram e selecione os Reels antes de ativar.",

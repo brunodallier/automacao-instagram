@@ -21,6 +21,7 @@
     "db:studio": "prisma studio",
     "owner:setup": "tsx scripts/setup-owner.ts",
     "owner:password": "tsx scripts/reset-password.ts",
+    "instagram:check": "tsx scripts/check-instagram.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {

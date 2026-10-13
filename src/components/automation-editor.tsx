@@ -22,6 +22,9 @@ import {
 import { AutomationMessageEditor } from "@/components/automation-message-editor";
 import { AutomationPublicReplies } from "@/components/automation-public-replies";
 import { AutomationConversationPreview } from "@/components/automation-conversation-preview";
+import { ReelList } from "@/components/reel-list";
+import { ReelSyncButton } from "@/components/reel-sync-button";
+import type { ReelOption } from "@/lib/instagram/reel-types";
 import {
   automationDraftSchema,
   EDITOR_LIMITS,
@@ -46,6 +49,7 @@ type SavedAutomation = {
   keywords: { id: string; value: string }[];
   steps: StoredStep[];
   publicReplies?: unknown;
+  reels?: { instagramReelId: string | null; externalId: string }[];
 };
 const stepLabels = {
   SEND_DM: "Mensagem privada",
@@ -63,6 +67,7 @@ function fromAutomation(automation?: SavedAutomation): EditorState {
     return {
       name: "",
       scope: "GLOBAL",
+      reelIds: [],
       keywords: [],
       steps: [],
       publicReplies: emptyPublicReplies(),
@@ -70,6 +75,10 @@ function fromAutomation(automation?: SavedAutomation): EditorState {
   return {
     name: automation.name,
     scope: automation.scope,
+    reelIds:
+      automation.reels?.flatMap((reel) =>
+        reel.instagramReelId ? [reel.instagramReelId] : [],
+      ) ?? [],
     keywords: automation.keywords.map((keyword) => keyword.value),
     publicReplies: readPublicReplies(
       automation.publicReplies,
@@ -98,14 +107,17 @@ function toDraft(state: EditorState): AutomationDraft {
 export function AutomationEditor({
   automation,
   tags,
+  reels = [],
 }: {
   automation?: SavedAutomation;
   tags: TagOption[];
+  reels?: ReelOption[];
 }) {
   const [state, setState] = useState<EditorState>(() =>
     fromAutomation(automation),
   );
   const [keywordInput, setKeywordInput] = useState("");
+  const [reelItems, setReelItems] = useState(reels);
   const [activeStep, setActiveStep] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [feedback, setFeedback] = useState<{
@@ -372,23 +384,54 @@ export function AutomationEditor({
                   <small>Nos próximos Reels que você publicar.</small>
                 </span>
               </label>
-              <label className="scope-disabled">
+              <label
+                className={
+                  !reelItems.length
+                    ? "scope-disabled"
+                    : state.scope === "SPECIFIC_REELS"
+                      ? "selected"
+                      : ""
+                }
+              >
                 <input
                   type="radio"
                   name="scope"
                   checked={state.scope === "SPECIFIC_REELS"}
-                  disabled
-                  readOnly
+                  disabled={!reelItems.length}
+                  onChange={() => updateState({ scope: "SPECIFIC_REELS" })}
                 />
                 <span>
-                  <strong>
-                    Reels específicos <em>Em breve</em>
-                  </strong>
-                  <small>Escolha publicações depois da conexão.</small>
+                  <strong>Reels específicos</strong>
+                  <small>
+                    {reelItems.length
+                      ? "Selecione um ou vários Reels sincronizados."
+                      : "Sincronize seus Reels para habilitar."}
+                  </small>
                 </span>
               </label>
             </fieldset>
             {fieldIssue("scope")}
+            <div className="reel-toolbar">
+              <ReelSyncButton
+                onLibraryChange={(library) => setReelItems(library.items)}
+              />
+              <Link href="/reels" className="text-link">
+                Ver meus Reels
+              </Link>
+            </div>
+            {state.scope === "SPECIFIC_REELS" ? (
+              <ReelList
+                items={reelItems}
+                selectedIds={state.reelIds ?? []}
+                onSelectionChange={(reelIds) => updateState({ reelIds })}
+              />
+            ) : null}
+            {automation?.reels?.some((reel) => !reel.instagramReelId) ? (
+              <p className="editor-hint">
+                As associações antigas foram preservadas. Novas seleções usam o
+                catálogo sincronizado.
+              </p>
+            ) : null}
           </section>
           <section className="card editor-section">
             <div className="editor-section-heading">

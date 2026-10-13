@@ -1,5 +1,77 @@
 # Validação da plataforma Pulso
 
+## Reels reais e seleção específica — 13 de outubro de 2026
+
+A API Instagram Login retornou 175 publicações em quatro páginas, das quais 87 eram `VIDEO` com produto `REELS`. Os 87 foram persistidos na conta/workspace autorizados, em PostgreSQL UTF8, com legenda, data e miniatura. A leitura alcançou junho de 2022. A repetição da sincronização manteve exatamente os mesmos 87 IDs internos, sem duplicar registros. Nenhum vídeo fictício foi criado no banco da aplicação.
+
+| Verificação | Resultado |
+| --- | --- |
+| `npm test` | 97 testes unitários aprovados |
+| Integração em PostgreSQL separado | 29 aprovados, em sequência |
+| Navegador | 24 aprovados no build de produção |
+| TypeScript, lint e build | Aprovados |
+| Migration | Sexta migration, aditiva; diferença de schema revisada, sem remoção de dados |
+| Backup anterior | Dump oficial verificado por checksum, catálogo e restauração completa em banco UTF8 de validação |
+| Sincronização real repetida | 87 Reels em quatro páginas; IDs estáveis, nenhuma duplicata |
+| API e páginas locais | POST/GET autenticados, biblioteca e editor HTTP 200; conteúdo das respostas sem credencial |
+| Dados anteriores | Proprietário/hash/versão de sessão, workspace, automação, três palavras-chave, quatro blocos e demais registros anteriores preservados |
+
+Os testes cobrem identificação por produto/permalink, exclusão de vídeos sem evidência de Reel, campos opcionais, cursores e páginas antigas, dados inválidos, token expirado, limites e falha em página posterior. A integração confirma transação sem atualização parcial, Unicode, upserts, acesso somente ao workspace correto, seleção múltipla, IDs estáveis de vínculos, compatibilidade de clientes antigos e associações legadas. A seleção específica prevalece sobre candidatas globais já elegíveis; não foi criado motor de envio.
+
+No navegador, a biblioteca permite pesquisar, o editor habilita Reels específicos, a seleção é salva/reaberta e uma falha simulada preserva a lista. Foram verificadas autenticação, origem da mutação, apresentação móvel, prévia e simulador anteriores. As fixtures usam exclusivamente banco separado, com token real retirado do ambiente do servidor de testes.
+
+O novo teste inicialmente encontrou também o anúncio global de rota ao procurar um alerta; o seletor foi restringido à seção da biblioteca. O teste de logout identificou uma regressão real de altura: o novo item de menu deixava o botão de sair fora da viewport em janelas baixas. A barra lateral agora permite rolagem quando necessário, preservando seu layout. A suíte completa passou com logout acessível, sem alteração nas regras de sessão ou senha.
+
+O snapshot e os backups privados `reels-before-20261013.dump` e `reels-after-20261013.dump` ficam no diretório local de backups, fora do GitHub. A cópia anterior foi restaurada e comparada integralmente antes da migration. Os cinco registros de migrations anteriores foram preservados, com uma sexta adicionada. O banco WIN1252 original da migração anterior continua disponível. [Configuração, limitações e recuperação](REELS.md).
+
+## Instagram Login: consulta de leitura — 13 de outubro de 2026
+
+Foi implementada uma consulta `GET /me`, com `fields=user_id,username`, no host fixo `graph.instagram.com`. O token é resolvido no servidor a partir do ambiente privado e enviado por cabeçalho, sem aparecer em URL, resposta ao navegador ou logs. A rota local exige proprietário autenticado. A origem da credencial é substituível para uma futura renovação; nesta etapa não há OAuth no Pulso, troca/renovação de tokens, envio, webhooks ou gravação de tokens no banco.
+
+| Verificação | Resultado |
+| --- | --- |
+| `npm test` | 83 testes unitários aprovados |
+| Integração em PostgreSQL UTF8 separado | 23 aprovados, executados em sequência |
+| Navegador | 23 aprovados, incluindo o novo painel de conexão e as funcionalidades anteriores |
+| TypeScript, lint e build | Aprovados |
+| Instância local em porta 3000 | Login e painel HTTP 200; API anônima 401; consulta autenticada HTTP 200 com cache desabilitado |
+| Preservação dos dados | Conteúdo completo das 11 tabelas, nove relacionamentos e cinco migrations idêntico ao snapshot anterior |
+| Token real da instalação | Inserido manualmente pelo proprietário; leitura do perfil confirmada pela Meta, pelo comando local, pela API autenticada e pelo painel |
+
+Os testes de leitura cobrem configuração ausente/inválida, credencial somente em cabeçalho, host fixo, redirects bloqueados, timeout/rede, erros de autenticação, expiração explicitamente identificada, permissões, limite de consultas, JSON inválido e identidade inválida. O corpo bruto da Meta e exceções não são devolvidos, e eco de credencial em campos de identidade é rejeitado. O teste de navegador usa credencial vazia no servidor e resultados simulados apenas na rota local; verifica estados de sucesso/expiração, usuário e ID, remoção da identidade em falha, resultado anterior identificado quando a atualização falha e ausência de overflow móvel.
+
+Uma expectativa antiga do teste móvel referenciava o texto anterior da página Saúde. Foi atualizada para a mensagem que informa onde consultar a leitura do Instagram; a suíte completa passou após a correção. As mudanças locais de documentação da migração UTF8 foram preservadas.
+
+O comando `npm run instagram:check` foi exercitado sem token: informou configuração ausente, encerrou com código 1 e não efetuou chamada externa. Uma sessão temporária de diagnóstico validou a autorização da rota e do painel da instalação sem solicitar ou alterar a senha do proprietário. Nenhum segredo ou token dessa sessão foi registrado. O snapshot local `instagram-before-20261013.json` contém somente contagens, digests e metadados e fica no diretório privado de backups anterior, fora do repositório.
+
+O arquivo `.env` recebeu somente os campos locais do Instagram, sem sobrescrever as demais variáveis. Após a inserção manual do token pelo proprietário, o servidor foi reiniciado e `npm run instagram:check` confirmou o usuário e o ID reais. A rota autenticada e o HTML do painel confirmaram a mesma identidade e o estado **Leitura verificada**, sem a credencial nas respostas. Uma nova comparação confirmou que os dados existentes permanecem idênticos ao snapshot anterior. A identidade pessoal não foi copiada para a documentação versionável, e o token não foi registrado. Os exemplos dos testes não são usados como conta conectada. [Configuração manual e arquitetura](INSTAGRAM.md).
+
+## Migração local para UTF8 — 12 de outubro de 2026
+
+A conexão local passou de `automacao_instagram` (WIN1252) para `automacao_instagram_utf8` (UTF8), no mesmo PostgreSQL 18.4, porta 55432. O banco original foi preservado. Backups completos, configuração privada de recuperação e relatórios ficaram fora do repositório, em diretório com acesso restrito ao usuário do Windows e SYSTEM.
+
+O backup inicial foi restaurado em um banco de validação. Após os testes, os processos da aplicação foram interrompidos, foi obtido um novo backup completo e esse backup final foi restaurado no destino definitivo. Os dois arquivos foram verificados por SHA-256, leitura do catálogo com `pg_restore --list` e restauração com `--exit-on-error --single-transaction`.
+
+Todos os registros das 11 tabelas foram comparados por contagem e digest do conteúdo completo, inclusive os hashes de senha e o histórico integral das cinco migrations. Também conferiram definições de colunas, índices, permissões, constraints, nove chaves estrangeiras e sequências. Foram preservados um proprietário, um workspace, uma associação de proprietário, uma automação, três palavras-chave e quatro blocos. Tags, Reels, contas sociais e controle de tentativas estavam sem registros na cópia final; permaneceram assim.
+
+Na cópia de validação e no destino definitivo, registros temporários passaram por gravação, leitura, reabertura e edição de mensagens com acentos, emojis, ideogramas, árabe, grego e acento combinante. O teste usou Prisma e as APIs reais de rascunhos, incluindo as respostas públicas em JSON. Todos os registros temporários foram removidos e uma nova comparação confirmou a igualdade dos dados originais.
+
+| Verificação | Resultado |
+| --- | --- |
+| Testes unitários | 58 aprovados |
+| Integração em banco UTF8 separado | 23 aprovados com `npm run test:integration -- --no-file-parallelism` |
+| Navegador em banco UTF8 separado | 22 aprovados, incluindo login por senha, revogação de sessão, rascunhos, editor e simulador |
+| TypeScript, lint e build | Aprovados |
+| Prisma no destino | Consultas, criação, edição e remoção temporária aprovadas; cinco migrations registradas, schema atualizado |
+| Sessão do proprietário após a troca | Consulta autenticada aprovada; acesso sem sessão recusado |
+| Credenciais e configuração | Somente o banco em `DATABASE_URL` mudou; demais variáveis preservadas |
+
+A execução inicial da integração detectou interferência entre suítes: um teste de contagem global observou os workspaces temporários de outra suíte. A troca foi suspensa até a repetição sequencial passar. Nenhum código de aplicação ou teste foi alterado para contornar o resultado.
+
+O login por senha foi exercitado pelas fixtures no banco de testes. A senha real do proprietário não foi solicitada, conhecida ou redefinida: seu hash e sua versão de sessão foram preservados integralmente; a sessão do proprietário foi verificada com token temporário de diagnóstico, sem registrá-lo. Os testes automatizados usaram `automacao_instagram_utf8_test` por sobrescrita apenas no ambiente dos processos de teste. `TEST_DATABASE_URL` do arquivo privado continua inalterada.
+
+Não foram executados resets nem migrations no banco da aplicação. As cinco migrations foram aplicadas somente no novo banco vazio de testes. Não houve alteração visual, de regras de negócio, funcionalidades ou integração Meta. [Detalhes e recuperação](MIGRACAO-UTF8.md).
+
 ## Política de senhas — 12 de outubro de 2026
 
 A criação e a redefinição usam a mesma validação: 6–14 caracteres, maiúscula, minúscula, número e pontuação/símbolo, todos obrigatórios. Espaços não satisfazem o requisito de caractere especial. Senhas não são aparadas nem normalizadas; a confirmação deve ser idêntica.

@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Suspense } from "react";
 import {
   ArrowRight,
   Check,
   Circle,
-  Camera as Instagram,
   MessageSquare,
   Send,
   ShieldAlert,
@@ -12,7 +12,8 @@ import {
   Tag,
   Settings2,
 } from "lucide-react";
-import { Badge, EmptyState, PageHeading } from "@/components/ui";
+import { EmptyState, PageHeading } from "@/components/ui";
+import { InstagramConnectionServer } from "@/components/instagram-connection-server";
 import { requireOwner } from "@/lib/session";
 import { db } from "@/lib/db";
 
@@ -56,12 +57,12 @@ export default async function Dashboard() {
             <div>
               <div>
                 <span className="stage-label">
-                  <span /> Integração em preparação
+                  <span /> Integração em validação
                 </span>
                 <h2>O próximo passo começa com organização.</h2>
                 <p>
-                  Prepare suas tags e desenhe suas conversas. A conexão com o
-                  Instagram vem depois.
+                  Prepare suas tags, desenhe suas conversas e verifique o acesso
+                  de leitura ao Instagram.
                 </p>
               </div>
             </div>
@@ -86,33 +87,19 @@ export default async function Dashboard() {
       </div>
       <div className="dashboard-grid">
         <div className="dashboard-main">
-          <section className="card connection-card">
-            <div className="section-heading">
-              <div className="section-heading-icon">
-                <Instagram size={21} aria-hidden="true" />
+          <Suspense
+            fallback={
+              <section
+                className="card connection-card"
+                aria-label="Conexão Instagram"
+              >
                 <h2>Conexão Instagram</h2>
-              </div>
-              <Badge>Não conectado</Badge>
-            </div>
-            <div className="connection-content">
-              <span className="connection-symbol">
-                <Instagram size={31} strokeWidth={1.4} aria-hidden="true" />
-              </span>
-              <div>
-                <h3>Sua conta, conectada ao seu espaço.</h3>
-                <p>
-                  A conexão com sua conta Business será disponibilizada em uma
-                  próxima etapa.
-                </p>
-              </div>
-            </div>
-            <div className="card-bottom">
-              <span>Integração oficial da Meta</span>
-              <Link href="/configuracoes">
-                Ver configurações <ArrowRight size={15} aria-hidden="true" />
-              </Link>
-            </div>
-          </section>
+                <p role="status">Verificando acesso de leitura…</p>
+              </section>
+            }
+          >
+            <InstagramConnectionServer />
+          </Suspense>
           <section className="card recent-card">
             <div className="section-heading">
               <h2>Automações recentes</h2>
@@ -171,8 +158,8 @@ export default async function Dashboard() {
                 <Circle size={12} />
               </span>
               <div>
-                <h3>Conecte o Instagram</h3>
-                <p>Disponível em uma próxima etapa.</p>
+                <h3>Verifique o Instagram</h3>
+                <p>Consulte o acesso de leitura no painel.</p>
               </div>
             </li>
           </ol>
@@ -187,8 +174,8 @@ export default async function Dashboard() {
         </aside>
       </div>
       <p className="data-caption">
-        As métricas permanecem zeradas enquanto a integração e o motor de
-        automações não estão disponíveis.
+        As métricas permanecem zeradas enquanto o motor de automações não está
+        disponível. A verificação de leitura não habilita envios.
       </p>
     </>
   );

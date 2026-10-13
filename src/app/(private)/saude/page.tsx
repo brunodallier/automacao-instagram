@@ -16,8 +16,9 @@ const services = [
   {
     name: "Conexão Instagram",
     icon: Instagram,
-    status: "Não conectado",
-    description: "Sua conta Business e permissões da Meta.",
+    status: "Verificação no painel",
+    description:
+      "O painel mostra o resultado atual da consulta de leitura ao perfil.",
   },
   {
     name: "Webhooks",
@@ -46,8 +47,8 @@ export default function HealthPage() {
         }
       />
       <FutureNotice>
-        O monitoramento será habilitado junto às integrações. Nenhuma
-        verificação de funcionamento foi realizada.
+        A verificação de leitura do Instagram está no painel. Monitoramento
+        contínuo, webhooks e filas ainda não foram habilitados.
       </FutureNotice>
       <section className="health-grid" aria-label="Estado dos serviços">
         {services.map(({ name, icon: Icon, status, description }) => (
@@ -64,8 +65,8 @@ export default function HealthPage() {
       <div className="verification-strip">
         <Clock3 size={19} aria-hidden="true" />
         <div>
-          <strong>Última verificação</strong>
-          <p>Nenhuma verificação realizada</p>
+          <strong>Monitoramento contínuo</strong>
+          <p>Não iniciado; a consulta de leitura é exibida no painel.</p>
         </div>
         <span className="muted">—</span>
       </div>

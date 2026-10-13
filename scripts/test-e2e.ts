@@ -20,6 +20,8 @@ try {
         NEXTAUTH_URL: "http://localhost:3100",
         NEXTAUTH_SECRET: randomBytes(32).toString("base64url"),
         E2E_PASSWORD: randomBytes(24).toString("base64url"),
+        // Tests must never contact Meta with the installation's real credential.
+        INSTAGRAM_ACCESS_TOKEN: "",
       },
     },
   );

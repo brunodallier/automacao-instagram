@@ -25,6 +25,7 @@ export class AutomationError extends Error {
 const include = {
   keywords: { orderBy: { createdAt: "asc" as const } },
   steps: true,
+  reels: true,
 };
 
 function errorFromDatabase(error: unknown): never {
@@ -106,8 +107,44 @@ function validateId(id: string) {
     throw new AutomationError("Automação inválida.", 400);
 }
 
+async function selectedReels(
+  client: PrismaClient | Prisma.TransactionClient,
+  workspaceId: string,
+  ids: string[] | undefined,
+) {
+  if (ids === undefined) return undefined; // Old clients cannot erase associations they never received.
+  const reels = await client.instagramReel.findMany({
+    where: {
+      id: { in: ids },
+      socialAccount: { workspaceId, platform: "INSTAGRAM" },
+    },
+  });
+  if (reels.length !== ids.length)
+    throw new AutomationError(
+      "Um Reel selecionado não está disponível neste espaço.",
+      400,
+    );
+  return reels;
+}
+
+function reelAssociation(reel: {
+  id: string;
+  externalId: string;
+  caption: string | null;
+  permalink: string | null;
+}) {
+  return {
+    instagramReelId: reel.id,
+    externalId: reel.externalId,
+    title: reel.caption
+      ? Array.from(reel.caption).slice(0, 160).join("")
+      : null,
+    permalink: reel.permalink,
+  };
+}
+
 type AutomationWithDetails = Prisma.AutomationGetPayload<{
-  include: { keywords: true; steps: true };
+  include: { keywords: true; steps: true; reels: true };
 }>;
 
 function mapAutomation(automation: AutomationWithDetails) {
@@ -116,6 +153,13 @@ function mapAutomation(automation: AutomationWithDetails) {
     name: automation.nameIsProvisional ? "" : automation.name,
     status: automation.status as AutomationStatus,
     scope: automation.scope as AutomationScope,
+    reels: automation.reels.map((reel) => ({
+      id: reel.id,
+      instagramReelId: reel.instagramReelId,
+      externalId: reel.externalId,
+      title: reel.title,
+      permalink: reel.permalink,
+    })),
     publicReplies: readPublicReplies(
       automation.publicReplies,
       [...automation.steps]
@@ -138,7 +182,11 @@ function mapAutomation(automation: AutomationWithDetails) {
         id: step.id,
         position: step.position,
         kind: step.kind as
-          "SEND_DM" | "BUTTONS" | "ADD_TAG" | "DELAY" | "PUBLIC_REPLY",
+          | "SEND_DM"
+          | "BUTTONS"
+          | "ADD_TAG"
+          | "DELAY"
+          | "PUBLIC_REPLY",
         text: step.text,
         delaySeconds: step.delaySeconds,
         tagId: step.tagId,
@@ -174,17 +222,21 @@ export function automationService(client: PrismaClient) {
       const data = payload(value);
       await ensureWorkspaceTags(client, workspaceId, data.steps);
       try {
-        const item = await client.automation.create({
-          data: {
-            workspaceId,
-            name: data.name,
-            nameIsProvisional: data.nameIsProvisional,
-            scope: data.scope,
-            publicReplies: data.publicReplies,
-            keywords: { create: data.keywords },
-            steps: { create: data.steps },
-          },
-          include,
+        const item = await client.$transaction(async (tx) => {
+          const reels = await selectedReels(tx, workspaceId, value.reelIds);
+          return tx.automation.create({
+            data: {
+              workspaceId,
+              name: data.name,
+              nameIsProvisional: data.nameIsProvisional,
+              scope: data.scope,
+              publicReplies: data.publicReplies,
+              keywords: { create: data.keywords },
+              steps: { create: data.steps },
+              reels: { create: reels?.map(reelAssociation) ?? [] },
+            },
+            include,
+          });
         });
         return mapAutomation(item);
       } catch (error) {
@@ -204,6 +256,30 @@ export function automationService(client: PrismaClient) {
           const previousPublicReplies = mapAutomation(existing).publicReplies;
           const publicInput = publicReplyInputKind(input);
           await ensureWorkspaceTags(tx, workspaceId, data.steps);
+          const reels = await selectedReels(tx, workspaceId, value.reelIds);
+          if (reels !== undefined) {
+            // Preserve legacy links with no catalogue ID. Only explicit user selection removes new links.
+            await tx.automationReel.deleteMany({
+              where: {
+                automationId: id,
+                instagramReelId: {
+                  not: null,
+                  notIn: reels.map((reel) => reel.id),
+                },
+              },
+            });
+            for (const reel of reels)
+              await tx.automationReel.upsert({
+                where: {
+                  automationId_externalId: {
+                    automationId: id,
+                    externalId: reel.externalId,
+                  },
+                },
+                create: { automationId: id, ...reelAssociation(reel) },
+                update: reelAssociation(reel),
+              });
+          }
           await tx.automationKeyword.deleteMany({
             where: { automationId: id },
           });
@@ -268,6 +344,9 @@ export function automationService(client: PrismaClient) {
       const draft = parse({
         name: saved.name,
         scope: saved.scope,
+        reelIds: saved.reels.flatMap((reel) =>
+          reel.instagramReelId ? [reel.instagramReelId] : [],
+        ),
         publicReplies: saved.publicReplies,
         keywords: saved.keywords.map((keyword) => keyword.value),
         steps: saved.steps.map(readStoredStep),

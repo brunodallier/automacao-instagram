@@ -152,9 +152,12 @@ model AutomationReel {
   permalink    String?    @db.VarChar(500)
   createdAt    DateTime   @default(now()) @db.Timestamptz(3)
   automation   Automation @relation(fields: [automationId], references: [id], onDelete: Cascade)
+  instagramReelId String?
+  instagramReel InstagramReel? @relation(fields: [instagramReelId], references: [id], onDelete: SetNull)
 
   @@unique([automationId, externalId])
   @@index([automationId])
+  @@index([instagramReelId])
 }
 
 // Somente metadados. OAuth, tokens e integrações serão definidos em outra etapa.
@@ -168,9 +171,32 @@ model SocialAccount {
   createdAt   DateTime               @default(now()) @db.Timestamptz(3)
   updatedAt   DateTime               @updatedAt @db.Timestamptz(3)
   workspace   Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  reelsSyncedAt DateTime? @db.Timestamptz(3)
+  reels InstagramReel[]
 
   @@unique([workspaceId, platform, externalId])
   @@index([workspaceId])
+}
+
+model InstagramReel {
+  id String @id @default(cuid())
+  socialAccountId String
+  externalId String @db.VarChar(120)
+  caption String? @db.Text
+  publishedAt DateTime? @db.Timestamptz(3)
+  permalink String? @db.Text
+  thumbnailUrl String? @db.Text
+  mediaType String @db.VarChar(30)
+  mediaProductType String? @db.VarChar(30)
+  classification String @db.VarChar(30)
+  syncedAt DateTime @db.Timestamptz(3)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+  socialAccount SocialAccount @relation(fields: [socialAccountId], references: [id], onDelete: Restrict)
+  automations AutomationReel[]
+
+  @@unique([socialAccountId, externalId])
+  @@index([socialAccountId, publishedAt])
 }
 
 // Controle persistente, compartilhado entre processos, sem armazenar e-mails.

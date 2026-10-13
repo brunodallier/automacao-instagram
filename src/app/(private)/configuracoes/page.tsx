@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import {
   Bell,
   Camera as Instagram,
@@ -47,23 +48,20 @@ export default async function SettingsPage() {
           <div className="settings-title">
             <Instagram size={20} aria-hidden="true" />
             <h2>Contas Instagram</h2>
-            <Badge>Não conectado</Badge>
+            <Badge>Verificação no painel</Badge>
           </div>
           <p>
-            A conexão com contas Business será feita pela integração oficial da
-            Meta.
+            O acesso de leitura ao perfil é verificado no painel pela API
+            oficial da Meta. A credencial é configurada somente no ambiente do
+            servidor.
           </p>
           <div className="settings-placeholder">
             <Instagram size={26} aria-hidden="true" />
-            <span>Nenhuma conta conectada</span>
+            <span>Consulte o resultado atual no painel</span>
           </div>
-          <button
-            className="button button-secondary"
-            disabled
-            title="A conexão será disponibilizada em uma próxima etapa"
-          >
-            Conectar Instagram <span className="button-soon">Em breve</span>
-          </button>
+          <Link className="button button-secondary" href="/painel#instagram">
+            Verificar conexão
+          </Link>
         </section>
         <section className="card settings-card">
           <div className="settings-title">
@@ -121,7 +119,7 @@ export default async function SettingsPage() {
         </p>
         <div className="integration-chips">
           <span>
-            Instagram <small>Não conectado</small>
+            Instagram <small>Leitura no painel</small>
           </span>
           <span>
             TikTok <small>Futuro</small>

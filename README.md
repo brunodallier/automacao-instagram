@@ -2,7 +2,7 @@
 
 Base de uma plataforma privada de automações para Instagram, com interface em português do Brasil. Esta entrega cobre a fundação segura e o editor da Etapa 2.
 
-O proprietário pode entrar com segurança, organizar tags e criar rascunhos de automações com persistência em PostgreSQL. O editor tem quatro etapas de configuração: definição e escopo, palavras-chave, respostas públicas e conversa privada. As respostas públicas têm cinco campos inicialmente vazios, variações adicionais em rotação e uma alternativa opcional para falha definitiva da DM. Os botões da conversa têm configuração compacta e podem ser recolhidos quando completos. A prévia interativa atualiza durante a edição e funciona antes de salvar. A integração Meta, OAuth, webhooks, filas e execução real continuam fora desta etapa.
+O proprietário pode entrar com segurança, organizar tags e criar rascunhos de automações com persistência em PostgreSQL. O editor tem quatro etapas de configuração: definição e escopo, palavras-chave, respostas públicas e conversa privada. As respostas públicas têm cinco campos inicialmente vazios, variações adicionais em rotação e uma alternativa opcional para falha definitiva da DM. Os botões da conversa têm configuração compacta e podem ser recolhidos quando completos. A prévia interativa atualiza durante a edição e funciona antes de salvar. A verificação de leitura do perfil Instagram está disponível com token local. OAuth dentro do Pulso, webhooks, filas e envio real continuam fora desta etapa.
 
 Repositório: [brunodallier/automacao-instagram](https://github.com/brunodallier/automacao-instagram).
 
@@ -54,6 +54,8 @@ Edite `.env` com valores próprios:
 | `POSTGRES_DB` | Banco da aplicação, padrão `automacao_instagram`. |
 | `POSTGRES_PORT` | Porta local do Docker, padrão `5432`. |
 | `TEST_DATABASE_URL` | URL de outro banco, exclusivo para testes. |
+| `INSTAGRAM_ACCESS_TOKEN` | Token do Instagram Login, somente no servidor; inserido manualmente no ambiente privado. |
+| `INSTAGRAM_API_VERSION` | Versão fixa da API Instagram, inicialmente `v25.0`. |
 
 Gere o segredo com:
 
@@ -66,6 +68,8 @@ Copie a saída para `NEXTAUTH_SECRET`. Não use o exemplo como senha e não comp
 Em uma instalação pública, use HTTPS e ajuste `NEXTAUTH_URL` para a origem real. Isso habilita os cookies seguros do Auth.js e define a origem aceita pelas operações de tags. Guarde os segredos no serviço de hospedagem e configure backups do PostgreSQL.
 
 ## PostgreSQL
+
+O banco da aplicação deve usar **UTF8** para persistir emojis e textos Unicode. A instância local foi migrada por dump/restore em 12 de outubro de 2026, preservando o banco WIN1252 original. Consulte [a validação e o procedimento de recuperação](docs/MIGRACAO-UTF8.md). A codificação é definida ao criar o banco; nenhuma migration do Prisma altera essa configuração.
 
 ### Com Docker
 
@@ -82,7 +86,7 @@ As variáveis de usuário e senha do container são aplicadas apenas na criaçã
 
 ### PostgreSQL existente ou hospedado
 
-Crie um banco vazio, configure `DATABASE_URL` com um usuário autorizado a criar as tabelas e execute:
+Crie um banco vazio com codificação **UTF8**, template e locale compatíveis, configure `DATABASE_URL` com um usuário autorizado a criar as tabelas e execute:
 
 ```powershell
 npm run db:migrate
@@ -91,6 +95,16 @@ npm run db:migrate
 `db:migrate` aplica as migrations versionadas com `prisma migrate deploy`. Para futuras alterações no schema durante desenvolvimento, use `npm run db:dev -- --name nome_da_alteracao`; revise e versione a migration gerada.
 
 O build gera o cliente, mas não aplica migrations nem precisa consultar um banco ativo. A execução da aplicação exige o PostgreSQL disponível.
+
+## Conexão de leitura com o Instagram
+
+Preencha somente `INSTAGRAM_ACCESS_TOKEN` no `.env` local, sem copiar o token para código, argumentos de comandos, URLs ou chat. Reinicie o servidor após salvar. O painel consulta `graph.instagram.com` e mostra o usuário, o ID e o resultado real da verificação; o botão **Verificar conexão** repete a leitura. Também é possível usar `npm run instagram:check` no terminal. [Configuração e arquitetura](docs/INSTAGRAM.md).
+
+A credencial é enviada somente pelo servidor no cabeçalho `Authorization`, sem query string. O perfil confirmado não comprova permissões de mensagens ou comentários. Essa etapa não envia DMs, respostas públicas, cria webhooks, ativa automações ou renova tokens. Os testes de navegador retiram o token real do ambiente de seu servidor.
+
+### Reels reais
+
+Abra **Meus Reels** e clique em **Sincronizar Reels** para consultar todas as páginas de publicações disponíveis pela Meta. O catálogo armazena somente Reels identificados, vinculados à conta e ao workspace. Na Etapa 1 do editor, **Reels específicos** permite pesquisar e selecionar um ou vários vídeos; a seleção é preservada ao salvar/reabrir rascunhos. A mesma sincronização está disponível no editor, sem apagar alterações em andamento. A instalação local sincronizou 87 Reels reais em quatro páginas. [Campos, limitações e recuperação](docs/REELS.md).
 
 ## Primeiro proprietário
 
@@ -146,7 +160,7 @@ npm start
 - Mensagens começam vazias, podem ser editadas, duplicadas e removidas; cada uma aceita até três botões com link HTTPS ou continuação subordinada ao clique.
 - Rascunhos incompletos podem ser salvos: nome, DM, URL, próxima mensagem, tag e atraso ainda podem estar em branco. Campos inválidos para ativação recebem avisos sem apagar seu conteúdo.
 - Prévia em tempo real, simulação de comentários por palavras-chave, cliques, retorno, reinício e apresentação de tags e atrasos sem executar ações reais.
-- A seleção de Reels específicos fica bloqueada até a conexão real com o Instagram. O backend preserva esse escopo em rascunhos incompletos e bloqueia sua ativação.
+- A seleção de Reels específicos fica disponível quando o workspace tem vídeos sincronizados. O backend valida os IDs, preserva vínculos e continua aceitando rascunhos incompletos; a ativação real permanece bloqueada.
 - Tags: criação, listagem, busca, renomeação e exclusão confirmada, com validação no frontend e backend.
 - Nomes de tags com até cinquenta caracteres, espaços normalizados e unicidade por espaço sem distinção entre maiúsculas e minúsculas. Acentos continuam significativos.
 - A restrição única no PostgreSQL impede duplicação mesmo em gravações concorrentes. Renomear mantém o ID e a data de criação.
@@ -156,7 +170,7 @@ npm start
 
 ## Dados e autorização
 
-O schema contém `User`, `Workspace`, `WorkspaceMembership`, `Tag`, `SocialAccount`, `LoginRateLimit`, `Automation`, `AutomationKeyword`, `AutomationStep` e `AutomationReel`. Contas sociais guardam somente metadados; não há campos de tokens da Meta nesta etapa.
+O schema contém `User`, `Workspace`, `WorkspaceMembership`, `Tag`, `SocialAccount`, `LoginRateLimit`, `Automation`, `AutomationKeyword`, `AutomationStep`, `AutomationReel` e `InstagramReel`. Contas sociais e Reels guardam somente metadados; não há campos de tokens da Meta nesta etapa.
 
 Cada consulta e mutação de tag obtém o workspace pela sessão validada no servidor. O cliente não escolhe um workspace. As mutações verificam a origem da solicitação e aceitam somente o formato validado. Os formulários do Auth.js usam a proteção CSRF da biblioteca.
 
@@ -166,7 +180,7 @@ Automações usam a mesma autorização, incluindo a verificação de que tags s
 
 `WorkspaceMembership` prepara a separação de usuários e espaços futuros, mas não oferece cadastro, convite, seleção de workspace ou gestão multiusuário.
 
-Tags têm ID estável e pertencem ao workspace. As etapas de tag referenciam `Tag.id`, nunca seu nome. `AutomationReel` prepara a associação futura com Reels sincronizados sem criar dados fictícios; a política de exclusão de tags em uso e a ativação do motor ainda deverão ser definidas.
+Tags têm ID estável e pertencem ao workspace. As etapas de tag referenciam `Tag.id`, nunca seu nome. `AutomationReel` associa o rascunho ao catálogo `InstagramReel`, preservando seus IDs e vínculos legados. Sincronizações não excluem vídeos ou associações. A ativação do motor ainda não está disponível.
 
 ## Testes e verificações
 
@@ -253,7 +267,7 @@ Na **Etapa 3 — Configure as respostas públicas**, preencha as variações des
 
 A migration `202610091700_public_reply_config` adiciona `Automation.publicReplies` e copia os antigos blocos públicos, preservando texto, ordem e campos vazios. Não exclui nem modifica os registros antigos. Eles deixam de aparecer na conversa privada e são consolidados na configuração própria ao salvar o rascunho. Clientes antigos que omitem a nova configuração mantêm as respostas existentes. Faça backup e use `npm run db:migrate` ao atualizar outra instalação; não resete o banco.
 
-A próxima etapa deve conectar a conta Instagram pela Meta, sincronizar Reels e habilitar a seleção de Reels específicos. Depois disso, serão definidos OAuth, tokens, webhooks, processamento, limites oficiais de envio, ativação, filas e recuperação de falhas.
+A conexão de leitura, a sincronização paginada e a seleção de Reels específicos estão disponíveis. Etapas futuras poderão definir OAuth no Pulso, renovação dos tokens, webhooks, processamento, limites oficiais de envio, ativação, filas e recuperação de falhas. Essas funcionalidades dependem de novo escopo e não foram implementadas nesta entrega.
 
 **Regra a preservar:** automações específicas de um Reel têm prioridade sobre automações globais.
 

@@ -32,6 +32,7 @@ test.beforeEach(async () => {
 });
 test.afterEach(async () => {
   if (userId) await client.user.deleteMany({ where: { id: userId } });
+  await client.instagramReel.deleteMany({ where: { socialAccount: { workspaceId: { in: [workspaceId, otherWorkspaceId].filter(Boolean) } } } });
   await client.workspace.deleteMany({
     where: { id: { in: [workspaceId, otherWorkspaceId].filter(Boolean) } },
   });
@@ -650,6 +651,75 @@ test("valida login e mostra métricas zeradas e estado real de preparação", as
   ).toBeVisible();
 });
 
+test("verifica Instagram sem token e mostra estados seguros no painel", async ({ page, request }) => {
+  expect((await request.get("/api/instagram/conexao")).status()).toBe(401);
+  await login(page);
+  const section = page.getByRole("region", { name: "Conexão Instagram" });
+  await expect(page.getByText("Envios desabilitados", { exact: true })).toBeVisible();
+  await expect(section.getByText("Não conectado", { exact: true })).toBeVisible();
+  const unconfigured = await page.request.get("/api/instagram/conexao");
+  expect(unconfigured.headers()["cache-control"]).toBe("private, no-store");
+  expect((await unconfigured.json()).status).toBe("NOT_CONFIGURED");
+  let state = "CONNECTED";
+  await page.route("**/api/instagram/conexao", async route => {
+    if (state === "HTTP_ERROR") return route.fulfill({ status: 503, json: { error: "Indisponível" } });
+    await route.fulfill({ json: {
+      status: state,
+      message: state === "CONNECTED" ? "Acesso de leitura confirmado." : "O token expirou. Atualize a configuração local.",
+      account: state === "CONNECTED" ? { id: "17841400000000001", username: "pulso_teste" } : null,
+      checkedAt: "2026-10-13T12:00:00.000Z",
+    } });
+  });
+  await section.getByRole("button", { name: "Verificar conexão" }).click();
+  await expect(section.getByText("Leitura verificada", { exact: true })).toBeVisible();
+  await expect(section.getByRole("heading", { name: "@pulso_teste" })).toBeVisible();
+  await expect(section.getByText("ID da conta: 17841400000000001", { exact: true })).toBeVisible();
+  state = "TOKEN_EXPIRED";
+  await section.getByRole("button", { name: "Verificar conexão" }).click();
+  await expect(section.getByText("Token expirado", { exact: true })).toBeVisible();
+  await expect(section.getByText(/ID da conta:/)).toHaveCount(0);
+  state = "HTTP_ERROR";
+  await section.getByRole("button", { name: "Verificar conexão" }).click();
+  await expect(section.getByRole("alert")).toContainText("Não foi possível atualizar");
+  await expect(section.getByText("Token expirado", { exact: true })).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
+test("pesquisa Reels, salva seleção específica e mantém dados ao falhar sincronização", async ({ page, request }) => {
+  expect((await request.get("/api/instagram/reels")).status()).toBe(401);
+  expect((await request.post("/api/instagram/reels", { headers: { Origin: "http://localhost:3100" } })).status()).toBe(401);
+  const account = await client.socialAccount.create({ data: { workspaceId, platform: "INSTAGRAM", externalId: "17841400000000199", username: "pulso_teste", status: "CONNECTED", reelsSyncedAt: new Date() } });
+  await client.instagramReel.createMany({ data: ["17900000000000011", "17900000000000012"].map((externalId, index) => ({ socialAccountId: account.id, externalId, caption: index ? "Outra publicação 😊" : "Lançamento 🚀", publishedAt: new Date("2026-10-01T12:00:00Z"), mediaType: "VIDEO", mediaProductType: "REELS", classification: "PRODUCT_TYPE", syncedAt: new Date(), permalink: `https://www.instagram.com/reel/Test${index}/` })) });
+  await login(page);
+  expect((await page.request.post("/api/instagram/reels")).status()).toBe(403);
+  await page.goto("/reels");
+  await expect(page.getByRole("heading", { name: "Meus Reels", exact: true })).toBeVisible();
+  await page.getByLabel("Pesquisar Reels").fill("lançamento");
+  await expect(page.getByText("Lançamento 🚀", { exact: true })).toBeVisible();
+  await expect(page.getByText("Outra publicação 😊", { exact: true })).toHaveCount(0);
+  await page.route("**/api/instagram/reels", async route => route.request().method() === "POST" ? route.fulfill({ status: 422, json: { error: "A Meta informou que o token expirou. Os Reels armazenados foram preservados.", code: "TOKEN_EXPIRED" } }) : route.continue());
+  await page.getByRole("button", { name: "Sincronizar Reels" }).click();
+  await expect(page.getByRole("region", { name: "Meus Reels" }).getByRole("alert")).toContainText("Os Reels armazenados foram preservados");
+  expect(await client.instagramReel.count({ where: { socialAccountId: account.id } })).toBe(2);
+  await page.unroute("**/api/instagram/reels");
+  await page.goto("/automacoes/nova");
+  const scope = page.getByRole("radio", { name: /Reels específicos/ });
+  await expect(scope).toBeEnabled(); await scope.check();
+  await page.getByLabel("Selecionar Reel 17900000000000011").check();
+  await page.getByLabel("Selecionar Reel 17900000000000012").check();
+  await page.getByRole("button", { name: "Salvar rascunho" }).click();
+  await expect(page.getByText("Rascunho salvo com segurança.", { exact: true })).toBeVisible();
+  const saved = await client.automation.findFirstOrThrow({ where: { workspaceId }, include: { reels: true } });
+  expect(saved.scope).toBe("SPECIFIC_REELS"); expect(saved.reels).toHaveLength(2);
+  await page.reload();
+  await expect(page.getByLabel("Selecionar Reel 17900000000000011")).toBeChecked();
+  await expect(page.getByLabel("Selecionar Reel 17900000000000012")).toBeChecked();
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: ".tmp/reels-editor-mobile.png", fullPage: true });
+});
+
 test("cria, rejeita duplicação, renomeia e persiste após recarregar", async ({
   page,
 }) => {
@@ -829,7 +899,7 @@ test("navegação móvel e páginas futuras funcionam sem ultrapassar a tela", a
   ).toBeVisible();
   await page.goto("/saude");
   await expect(
-    page.getByText("Nenhuma verificação realizada", { exact: true }),
+    page.getByText("Não iniciado; a consulta de leitura é exibida no painel.", { exact: true }),
   ).toBeVisible();
   await page.goto("/configuracoes");
   await expect(page.getByText(email, { exact: true })).toBeVisible();

@@ -16,6 +16,7 @@ import {
   X,
   ChevronRight,
   Camera as Instagram,
+  Film,
 } from "lucide-react";
 import { Badge, Brand } from "@/components/ui";
 
@@ -33,6 +34,7 @@ const navigation = [
     group: "Organização",
   },
   { href: "/tags", label: "Tags", icon: Tag, group: "Organização" },
+  { href: "/reels", label: "Meus Reels", icon: Film, group: "Organização" },
   {
     href: "/saude",
     label: "Saúde do sistema",
@@ -159,7 +161,7 @@ export function AppShell({
           <div className="topbar-status">
             <Instagram size={16} aria-hidden="true" />
             <span>Instagram</span>
-            <Badge>Não conectado</Badge>
+            <Badge>Envios desabilitados</Badge>
           </div>
         </header>
         <main id="conteudo" className="main-content">
