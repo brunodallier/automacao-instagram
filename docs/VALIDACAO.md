@@ -138,6 +138,7 @@ Os novos casos verificam a ordem das quatro seções, cinco respostas inicialmen
 Rascunhos antigos com blocos públicos foram reabertos e salvos na etapa própria, mantendo a DM e seus botões. Atualizações que omitem a nova configuração foram verificadas para não apagar as respostas; clientes antigos que ainda enviam blocos públicos preservam os controles, a alternativa e as variações adicionais. Em mobile, os campos dos botões têm 36 px de altura, recolher reduz o contêiner a menos da metade e as ações de URL/continuação funcionam recolhidas. Expandir, editar, remover um botão anterior, salvar e reabrir mantêm a continuação. Não houve rolagem horizontal a 390 px.
 
 OAuth da Meta, sincronização de Reels, webhooks, filas e motor de execução permanecem fora desta entrega. O editor salvo nesta etapa trabalha com rascunhos e prévia local.
+
 ## Preparação Docker / Hostinger — 13 de outubro de 2026
 
 Produção foi preparada em um Compose separado: Next.js standalone com usuário sem privilégios, PostgreSQL 18.6 UTF8 persistente, Caddy 2.11.2, worker contínuo em standby e perfil de backup com Restic 0.19.1. Não houve implantação remota, mudança da interface, webhooks ou envio real. O Compose de desenvolvimento e `.env` existente foram preservados.
@@ -167,3 +168,19 @@ A auditoria completa mantém cinco alertas preexistentes na cadeia de desenvolvi
 O snapshot somente de leitura do banco original confirmou igualdade de registros, schema, constraints, índices, grants, sequences e migrations antes/depois: 12 tabelas, seis migrations e 11 relacionamentos. Backup privado adicional do ensaio foi guardado fora do Git em `C:\Users\bruno\.codex\backups\pulso\20261012-utf8\docker-isolated-20261013.dump`. O banco original e os backups anteriores continuam disponíveis.
 
 Procedimentos, limitações e próximos passos: [HOSTINGER-DOCKER.md](HOSTINGER-DOCKER.md).
+
+## Revalidação no Docker Desktop 4.95.0 — 13 de outubro de 2026
+
+Após a atualização do Docker Desktop, a estrutura foi executada diretamente pelo PowerShell, com Engine Linux 29.8.2 e Compose 5.6.0, sem ativar a integração com Ubuntu e sem reiniciar o Docker Desktop. Antes dos ensaios foram registrados os nove contêineres de outros projetos (ID, estado, início e número de reinícios), um snapshot somente de leitura das 12 tabelas do Pulso e o digest do `.env`.
+
+Foi criado um novo dump oficial e verificado, privado, em `C:\Users\bruno\.codex\backups\pulso\20261012-utf8\docker-desktop-20261013.dump`. O banco principal continua sendo `automacao_instagram_utf8`, UTF8, com 87 Reels, duas automações, um proprietário e seis migrations. As cópias Docker usam credenciais descartáveis e token Instagram vazio; nenhuma chamada real à Meta é necessária.
+
+Os ensaios contemplam a restauração dessa cópia e a partida com banco vazio. Foram ampliados para verificar CSS/JavaScript, login, painel, editor, sessão HTTPS, proteção de APIs e os IDs dos Reels do workspace. Também criam/alteram/reabrem/removem um rascunho incompleto com mensagens Unicode e até dois Reels específicos. As gravações ocorrem somente no banco descartável; depois da remoção, os digests da cópia retornam integralmente ao estado anterior.
+
+O cliente HTTP do ensaio passou a declarar o comprimento correto dos corpos JSON, inclusive nas requisições DELETE encadeadas. A imagem de backup agora declara `CMD ["schedule"]` explicitamente, evitando herdar `postgres` da imagem base. O teste inicia o serviço de backup sem argumentos e aguarda saúde/primeiro backup antes de exercitar os comandos manuais e a recuperação. Nenhum código da aplicação, regra de negócio, schema ou interface foi modificado nesta revalidação.
+
+Os resultados dos ensaios incluem saúde dos serviços, limites de recursos, worker em standby sem token Instagram, reinício automático após falha do worker e persistência após reiniciar apenas o PostgreSQL de teste. O backup criptografado é verificado integralmente e recuperado por SHA256/`pg_restore` em outro banco UTF8, com igualdade de contagens e digests das 12 tabelas. O destino Restic é um volume local de teste; armazenamento externo, DNS/ACME públicos e a VPS ainda não foram configurados.
+
+Reexecutados também os 102 testes unitários, quatro testes de secrets/runtime, lint e TypeScript. O build Next.js de produção é executado dentro das imagens Linux. Os 29 testes de integração e 24 testes de navegador da entrega anterior continuam registrados acima; não se confundem com os ensaios Docker desta revalidação. Os recursos de teste são removidos exclusivamente pelo nome aleatório do projeto; não são usados prune, reset, remoção global de volumes ou interrupção de outros serviços.
+
+Resultado final: partida com banco vazio aprovada; ensaio ampliado com os 87 Reels aprovado; partida padrão do backup agendado e primeira execução saudáveis; verificação/recuperação integral do backup aprovadas. A comparação final confirmou `.env` intacto, igualdade das 12 tabelas/schema/migrations do PostgreSQL original e os mesmos nove contêineres de outros projetos, sem alteração de IDs, estado, início ou contadores de reinício. Nenhum contêiner ou volume de teste permaneceu ativo. O Docker Desktop foi mantido em execução.

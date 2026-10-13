@@ -74,13 +74,14 @@ let ca;
 async function http(path, { method = "GET", token, body } = {}) {
   return await new Promise((ok, fail) => {
     const headers = {};
+    const payload = body === undefined ? undefined : JSON.stringify(body);
     if (token) headers.Cookie = `__Secure-next-auth.session-token=${token}`;
-    if (body) { headers["Content-Type"] = "application/json"; headers.Origin = origin; }
+    if (payload !== undefined) { headers["Content-Type"] = "application/json"; headers["Content-Length"] = Buffer.byteLength(payload); headers.Origin = origin; }
     const req = request(`${origin}${path}`, { ca, method, headers, rejectUnauthorized: true }, (res) => {
       let text = ""; res.on("data", (data) => { text += data; });
       res.on("end", () => ok({ status: res.statusCode, body: text, headers: res.headers }));
     });
-    req.on("error", fail); req.setTimeout(15000, () => req.destroy(new Error("HTTPS timeout"))); req.end(body ? JSON.stringify(body) : undefined);
+    req.on("error", fail); req.setTimeout(15000, () => req.destroy(new Error("HTTPS timeout"))); req.end(payload);
   });
 }
 async function fingerprint(database = "pulso_test") {
@@ -115,22 +116,48 @@ try {
   const certificate = join(directory, "root.crt");
   await compose("cp", "caddy:/data/caddy/pki/authorities/local/root.crt", linuxPath(certificate));
   ca = readFileSync(certificate);
-  assert.equal((await http("/login")).status, 200);
+  const login = await http("/login");
+  assert.equal(login.status, 200);
+  const assets = [...new Set([...login.body.matchAll(/(?:src|href)="([^"\s]*\/_next\/static\/[^"\s]+\.(?:css|js))"/g)].map((match) => match[1]))];
+  assert.ok(assets.length > 0, "o build deve servir assets da interface");
+  for (const asset of assets) assert.equal((await http(asset)).status, 200);
   assert.equal((await http("/api/health/ready")).status, 404);
   assert.equal((await http("/api/automacoes")).status, 401);
-  const owner = JSON.parse((await sql('SELECT json_build_object(\'id\',id,\'version\',"sessionVersion") FROM "User" ORDER BY "createdAt" LIMIT 1')).trim());
+  const owner = JSON.parse((await sql('SELECT json_build_object(\'id\',u.id,\'version\',u."sessionVersion",\'workspace\',m."workspaceId") FROM "User" u JOIN "WorkspaceMembership" m ON m."userId"=u.id WHERE m.role=\'OWNER\' ORDER BY u."createdAt",m."createdAt" LIMIT 1')).trim());
   const token = await encode({ secret: auth, maxAge: 3600, token: { sub: owner.id, sessionVersion: owner.version, authenticatedAt: Date.now() } });
   sensitive.push(token);
   assert.equal((await http("/api/automacoes", { token })).status, 200);
   const reels = await http("/api/instagram/reels", { token });
   assert.equal(reels.status, 200);
+  const library = JSON.parse(reels.body);
+  const expectedReels = JSON.parse((await sql(`SELECT coalesce(json_agg(r.id ORDER BY r.id), '[]'::json) FROM "InstagramReel" r JOIN "SocialAccount" a ON a.id=r."socialAccountId" WHERE a."workspaceId"='${owner.workspace.replaceAll("'", "''")}' AND a.platform='INSTAGRAM'`)).trim());
+  assert.deepEqual(library.items.map((item) => item.id).sort(), expectedReels);
   assert.equal((await http("/reels", { token })).status, 200);
+  assert.equal((await http("/painel", { token })).status, 200);
+  assert.equal((await http("/automacoes/nova", { token })).status, 200);
+  // Escritas apenas na cópia descartável: persistir/reabrir mensagens e seleção.
+  const selected = library.items.slice(0, 2).map((item) => item.id);
+  const draft = { name: "Teste Docker: ação 🌊 漢字", scope: selected.length ? "SPECIFIC_REELS" : "GLOBAL", reelIds: selected, keywords: [], steps: [{ kind: "SEND_DM", format: "TEXT", text: "Rascunho incompleto 🌊", buttons: [] }], publicReplies: { enabled: false, strategy: "ROTATING", variations: ["", "", "", "", ""], fallback: { enabled: false, text: "" } } };
+  const createdDraft = await http("/api/automacoes", { token, method: "POST", body: draft });
+  assert.equal(createdDraft.status, 201);
+  const automation = JSON.parse(createdDraft.body);
+  assert.equal(automation.status, "DRAFT");
+  assert.deepEqual(automation.reels.map((reel) => reel.instagramReelId).sort(), selected.toSorted());
+  const message = "Mensagem editada: acentuação, 🌊 e 漢字";
+  const edit = await http(`/api/automacoes/${automation.id}`, { token, method: "PATCH", body: { ...draft, steps: [{ ...draft.steps[0], text: message }] } });
+  assert.equal(edit.status, 200);
+  const reopened = await http(`/api/automacoes/${automation.id}`, { token });
+  assert.equal(reopened.status, 200);
+  const saved = JSON.parse(reopened.body);
+  assert.equal(saved.steps[0].text, message);
+  assert.deepEqual(saved.reels.map((reel) => reel.instagramReelId).sort(), selected.toSorted());
+  assert.equal((await http(`/api/automacoes/${automation.id}`, { token, method: "DELETE", body: {} })).status, 204);
   const create = await http("/api/tags", { token, method: "POST", body: { name: "Docker: ação, 🌊 漢字" } });
-  assert.equal(create.status, 201);
+  assert.equal(create.status, 201, safe(create.body));
   const tag = JSON.parse(create.body);
   assert.equal((await http(`/api/tags/${tag.id}`, { token, method: "DELETE", body: {} })).status, 204);
   if (dump) assert.deepEqual(await fingerprint(), original);
-  console.log("Docker: HTTPS, sessão, Prisma, leitura de Reels e escrita Unicode passaram");
+  console.log("Docker: HTTPS, assets, sessão, Prisma, Reels, rascunhos e escrita Unicode passaram");
   const web = await inspect("web");
   assert.equal(web.Config.User, "pulso");
   assert.equal(web.HostConfig.ReadonlyRootfs, true);
@@ -149,6 +176,11 @@ try {
   if (dump) assert.deepEqual(await fingerprint(), original);
   console.log("Docker: limites, worker em espera, reinício automático e persistência passaram");
   await compose("--profile", "backup", "run", "--rm", "backup", "init");
+  await compose("--profile", "backup", "up", "-d", "backup");
+  await healthy("backup");
+  assert.equal((await inspect("backup")).HostConfig.RestartPolicy.Name, "unless-stopped");
+  await compose("--profile", "backup", "stop", "backup");
+  console.log("Docker: serviço de backup agendado iniciou e concluiu seu primeiro backup");
   await compose("--profile", "backup", "run", "--rm", "backup", "once");
   await compose("--profile", "backup", "run", "--rm", "backup", "check");
   restoredContainer = `${project}-restore`;
