@@ -1,6 +1,31 @@
 # Primeiro teste controlado: somente receber eventos
 
-Preparado em 15/10/2026. **Nada publicado, nenhum DNS alterado, nenhuma inscrição aplicada e nenhum dado migrado.** O primeiro teste proposto recebe um comentário assinado; não envia DM ou resposta pública. O teste de envio continua exigindo autorização própria com destinatário e textos definidos.
+Receptor de homologação publicado com autorização em 15/10/2026. **Somente o callback HTTPS está disponível; painel e envios reais permanecem bloqueados.** Nenhum dado local foi migrado. A verificação pela própria Meta e a inscrição da conta ainda estão pendentes. O teste de envio continua exigindo autorização própria com destinatário e textos definidos.
+
+## Estado verificado na VPS — 15/10/2026
+
+- A `webhooks.pulso.brunodallier.com.br` aponta para a VPS nos dois autoritativos do Registro.br e nos resolvedores públicos consultados. Nameservers, DNSSEC e registros dos sites existentes não foram alterados.
+- Projeto Compose separado `pulso-webhook-reception`: PostgreSQL e web saudáveis durante a instalação, Caddy atendendo HTTPS. Worker ausente; modo de envio `disabled`, sem access token Instagram no receptor e sem saída de internet no web. Os contêineres preexistentes mantiveram seu estado e contador de reinícios no comparativo do instalador.
+- Banco novo `pulso_webhook_test`, UTF8, schema aplicado e somente workspace/vínculo técnico da conta, com execução `NOT_CONNECTED`. Nenhum proprietário, Reel ou automação foi copiado. O banco local continua UTF8, com 87 Reels, duas automações e um proprietário; todas as tabelas e o hash da senha foram comparados com a referência privada, sem alterações.
+- Certificado público Let's Encrypt válido para o hostname, emitido em 15/10/2026, com vencimento em 13/01/2027. Caddy gerencia a renovação automática; sua emissão/renovação depende da manutenção do DNS, conectividade e volumes de certificados.
+- Teste externo pelo computador local: desafio com verify token correto retorna 200 e ecoa o desafio; token incorreto retorna 403; POST com HMAC correto retorna 200; assinatura inválida e corpo adulterado retornam 401. Foi usado envelope vazio, sem criar eventos fictícios ou enviar mensagens.
+- Painel, login, assets, saúde, demais caminhos, barra final no callback e métodos não autorizados bloqueados com 404. Acesso HTTP direto pelo IP também retorna 404. Somente 80/443 publicados por este projeto; nenhuma escuta em 3000, 5432 ou 2019 no host.
+- Site público `www.rendaextra.brunodallier.com.br` permaneceu HTTP 200 antes e depois da instalação.
+- Dump inicial próprio da homologação criado em diretório privado da VPS, em formato custom do PostgreSQL, com catálogo validado por `pg_restore --list` e SHA-256 registrado privadamente. Isso não constitui teste de restauração completo nem backup externo. O destino externo continua pendente antes da produção; o banco local e seu backup não foram transferidos.
+
+### Próxima etapa: configuração na Meta
+
+No aplicativo correto, em Instagram → API setup with Instagram login → Webhooks, configurar:
+
+- Callback: `https://webhooks.pulso.brunodallier.com.br/api/webhooks/instagram`.
+- Verify token: valor privado de `INSTAGRAM_WEBHOOK_VERIFY_TOKEN` no `.env` local. Copiar diretamente para o site da Meta; nunca para o chat, Git, logs ou capturas.
+- Verificar e salvar o callback. Depois revisar os campos `comments`, `messages`, `messaging_postbacks`, `messaging_seen` e a inscrição da conta pelo procedimento autorizado abaixo.
+
+A consulta de leitura `npm run instagram:webhooks:check` ainda retornou `NOT_SUBSCRIBED`. O desafio e o HMAC executados por nós não comprovam verificação pela Meta nem entrega de evento real. Primeiro confirmar o callback no aplicativo; depois aplicar e conferir a inscrição da conta. A conta/testador, permissões e modo do aplicativo precisam permitir o teste. Um comentário controlado deverá comprovar evento autêntico persistido na homologação, sem executar a fila ou habilitar envios.
+
+## Histórico da preparação anterior à publicação
+
+As seções seguintes registram os testes locais e o plano elaborado antes da autorização de publicação. As ações concluídas na VPS estão descritas acima. Não repetir a inicialização sobre a instalação existente.
 
 ## Validação local
 
