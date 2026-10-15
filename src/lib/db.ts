@@ -3,10 +3,10 @@ import { PrismaClient } from "@/generated/prisma/client";
 
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 
-export function createDatabaseClient(connectionString: string) {
+export function createDatabaseClient(connectionString: string, max = 5) {
   const adapter = new PrismaPg({
     connectionString,
-    max: 5,
+    max,
     connectionTimeoutMillis: 5000,
   });
   return new PrismaClient({ adapter });

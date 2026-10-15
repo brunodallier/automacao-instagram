@@ -23,6 +23,10 @@ Thumbs.db
 deploy/secrets/
 deploy/backups/
 deploy/production.env
+deploy/cloudflare/
 *.dump
 *.sql.gz
 *.private
+*.private.json
+__pycache__/
+*.py[cod]

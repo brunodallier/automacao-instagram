@@ -1,6 +1,6 @@
 # Mensagens e limites do editor
 
-Consulta às fontes oficiais da Meta em 9 de outubro de 2026. A documentação foi acessada diretamente no site da Meta; nenhuma chamada de envio foi realizada.
+Consulta às fontes oficiais da Meta em 9 de outubro, revisada em 14 de outubro de 2026. A documentação foi acessada diretamente no site da Meta; nenhuma chamada de envio real foi realizada. O motor agora está implementado e testado com API simulada: [estado e validação pendente](INSTAGRAM-MVP.md).
 
 ## Capacidades confirmadas na documentação
 
@@ -16,7 +16,7 @@ O salvamento valida estrutura, tamanhos de armazenamento, tipos de ações, dupl
 
 Os limites estruturais locais são: 20 etapas, 60 mensagens contando continuações e alternativas preservadas, oito níveis de mensagens e três botões por mensagem. Texto de rascunho aceita até 8.000 unidades UTF-16, título de botão até 200 e URL até 2.000, para guardar trabalho incompleto ou conteúdo antigo maior que os limites de envio. Estes são limites de armazenamento; não autorizam envio à Meta.
 
-A revisão exige título, palavra-chave, primeira DM, texto, títulos, URLs das ações de site e conteúdos das continuações. DMs adicionais no nível principal são sinalizadas porque não podem ser disparadas automaticamente após a Private Reply. Tags e atrasos também precisam estar definidos. O endpoint de ativação rejeita configurações inválidas e, mesmo com campos completos, retorna que a integração ainda está pendente. Não existe mudança para `ACTIVE` nesta etapa.
+A revisão exige título, palavra-chave, primeira DM, texto, títulos, URLs das ações de site e conteúdos das continuações. DMs adicionais no nível principal aguardam uma interação elegível após a Private Reply. Tags e atrasos também precisam estar definidos. O endpoint rejeita configurações inválidas; para mudar a `ACTIVE` exige configuração autorizada, migration aditiva instalada, conta vinculada e worker recente. No ambiente local os envios continuam bloqueados, sem aplicar a migration nova.
 
 A prévia é local e não acessa a Meta nem contatos. As continuações visíveis após cliques são hipóteses para revisão do conteúdo, inclusive quando o formato inicial ainda depende de confirmação. Palavras-chave são comparadas sem distinguir caixa, com espaços normalizados e limites de palavras; acentos continuam significativos. Tags e atrasos aparecem como etapas simuladas. As respostas públicas têm prévia independente da conversa privada. Uma opção explícita permite simular uma resposta recebida para examinar DMs subsequentes.
 
@@ -24,7 +24,7 @@ A prévia é local e não acessa a Meta nem contatos. As continuações visívei
 
 As quatro etapas são uma ordem de configuração: definição/escopo, palavras-chave, respostas públicas e conversa privada. Esta ordem não impõe envio público antes da DM. Respostas públicas não são blocos adicionáveis à conversa privada.
 
-A configuração pública inicia desativada, com cinco variações vazias e editáveis, sem textos padronizados. É possível adicionar variações, até o limite estrutural local de 100. A estratégia armazenada é `ROTATING`: a função pura `rotatingPublicReply` alterna somente entre variações preenchidas e válidas, com cursor fornecido pelo chamador. No simulador, cada comentário avança o cursor e reiniciar volta à primeira variação. Não há cursor de execução real nem envio nesta entrega.
+A configuração pública inicia desativada, com cinco variações vazias e editáveis, sem textos padronizados. É possível adicionar variações, até o limite estrutural local de 100. A estratégia armazenada é `ROTATING`: a função pura `rotatingPublicReply` alterna somente entre variações preenchidas e válidas, com cursor fornecido pelo chamador. No simulador, cada comentário avança o cursor e reiniciar volta à primeira variação. O motor agora persiste esse cursor com bloqueio transacional; o estado visual do simulador continua independente.
 
 A resposta alternativa possui texto e controle independentes das respostas normais. `fallbackPublicReply` exige a alternativa habilitada, conteúdo válido, erro definitivo identificado e justificativa explícita para a alternativa. `UNCONFIRMED`, `API_ACCEPTED`, `DELAYED` e `TEMPORARY_FAILURE` nunca a selecionam. Aceitação da API não comprova entrega; ausência de confirmação ou atraso não comprova falha definitiva. O simulador oferece situações fictícias explícitas para conferir essas regras, sem gerar eventos reais de entrega.
 
@@ -32,7 +32,7 @@ O limite público de **500 caracteres Unicode é uma política local já usada p
 
 Os botões mantêm as ações `OPEN_URL` e `NEXT_MESSAGE`, os limites e a preservação das duas configurações ao trocar a ação. Os campos têm altura consistente, contadores discretos e menor espaçamento. Um botão completo pode ser recolhido para mostrar título e ação e expandido para editar. O recolhimento é estado visual local e não altera o rascunho nem as continuações.
 
-## Persistência e integração futura
+## Persistência e integração
 
 As mensagens permanecem nas colunas existentes de `AutomationStep`. O JSON de botões guarda título, ação, URL e `nextMessage`, com discriminação `format: TEXT`. Alterar uma ação mantém a URL e a continuação anteriores; somente remover explicitamente o botão ou a mensagem descarta esse conteúdo. Objetos antigos `{label,url}` recebem a ação de URL ao serem lidos. A migration anterior adicionou `nameIsProvisional` a `Automation`.
 
@@ -40,4 +40,4 @@ A migration `202610091700_public_reply_config` adiciona o JSON nullable `Automat
 
 O guard puro `canDeliverMessage` diferencia `PRIVATE_REPLY` de `AUTHORIZED_CONVERSATION`. Ele exige data do comentário e ausência de resposta anterior no primeiro caso; no segundo, exige uma interação verificada e prazo válido. `URL_CLICK`, ausência de evento, datas futuras e janela expirada são recusados. Um clique no simulador nunca é usado como evento de webhook.
 
-Antes de integrar de verdade, será necessário confirmar permissões e versão da API, assinatura e origem dos webhooks, correspondência do postback ao destinatário e ao botão, elegibilidade das interações, renderização e limite dos títulos, formatos da Private Reply e comportamento em Solicitações. A janela deve ser reavaliada antes de cada envio, inclusive após atrasos. As regras puras desta etapa não substituem esses testes. OAuth, tokens, webhooks, envios, contatos e processamento seguem pendentes.
+O motor valida assinatura, conta/workspace, correspondência do postback ao destinatário/template e elegibilidade; reavalia a janela antes de cada envio, inclusive após atrasos. A migration aditiva de execução adiciona eventos, contatos/tags, fila, atividades e estados sem substituir o armazenamento do editor. Testes isolados verificaram esses fluxos. Ainda é necessário demonstrar permissões, eventos e envios no aplicativo real da Meta, renderização dos títulos, Private Reply e comportamento em Solicitações. OAuth e renovação automática continuam pendentes; não são habilitados por esta entrega.

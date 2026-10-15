@@ -59,9 +59,17 @@ services:
       NEXTAUTH_SECRET_FILE: /run/secrets/nextauth_secret
       INSTAGRAM_ACCESS_TOKEN_FILE: /run/secrets/instagram_token
       INSTAGRAM_API_VERSION: ${INSTAGRAM_API_VERSION:-v25.0}
+      INSTAGRAM_SEND_MODE: ${INSTAGRAM_SEND_MODE:-disabled}
+      INSTAGRAM_META_VALIDATED: ${INSTAGRAM_META_VALIDATED:-false}
+      INSTAGRAM_WEBHOOK_ENABLED: ${INSTAGRAM_WEBHOOK_ENABLED:-false}
+      INSTAGRAM_EXECUTION_ACCOUNT_ID: ${INSTAGRAM_EXECUTION_ACCOUNT_ID:-}
+      INSTAGRAM_TEST_COMMENT_ID: ${INSTAGRAM_TEST_COMMENT_ID:-}
+      INSTAGRAM_TEST_RECIPIENT_ID: ${INSTAGRAM_TEST_RECIPIENT_ID:-}
+      INSTAGRAM_APP_SECRET_FILE: /run/secrets/instagram_app_secret
+      INSTAGRAM_WEBHOOK_VERIFY_TOKEN_FILE: /run/secrets/instagram_webhook_verify_token
       NEXTAUTH_URL: ${PULSO_PUBLIC_URL:?Configure PULSO_PUBLIC_URL}
       NODE_OPTIONS: "--max-old-space-size=1024"
-    secrets: [database_url, nextauth_secret, instagram_token]
+    secrets: [database_url, nextauth_secret, instagram_token, instagram_app_secret, instagram_webhook_verify_token]
     depends_on: { postgres: { condition: service_healthy }, migrate: { condition: service_completed_successfully } }
     healthcheck:
       test: ["CMD", "node", "ops/runtime/healthcheck.mjs"]
@@ -75,8 +83,18 @@ services:
   worker:
     <<: *app
     command: ["node", "ops/runtime/worker.mjs"]
-    environment: { DATABASE_URL_FILE: /run/secrets/database_url, NODE_OPTIONS: "--max-old-space-size=64" }
-    secrets: [database_url]
+    environment:
+      DATABASE_URL_FILE: /run/secrets/database_url
+      NODE_OPTIONS: "--max-old-space-size=128"
+      INSTAGRAM_ACCESS_TOKEN_FILE: /run/secrets/instagram_token
+      INSTAGRAM_API_VERSION: ${INSTAGRAM_API_VERSION:-v25.0}
+      INSTAGRAM_SEND_MODE: ${INSTAGRAM_SEND_MODE:-disabled}
+      INSTAGRAM_META_VALIDATED: ${INSTAGRAM_META_VALIDATED:-false}
+      INSTAGRAM_WEBHOOK_ENABLED: ${INSTAGRAM_WEBHOOK_ENABLED:-false}
+      INSTAGRAM_EXECUTION_ACCOUNT_ID: ${INSTAGRAM_EXECUTION_ACCOUNT_ID:-}
+      INSTAGRAM_TEST_COMMENT_ID: ${INSTAGRAM_TEST_COMMENT_ID:-}
+      INSTAGRAM_TEST_RECIPIENT_ID: ${INSTAGRAM_TEST_RECIPIENT_ID:-}
+    secrets: [database_url, instagram_token]
     depends_on: { postgres: { condition: service_healthy }, migrate: { condition: service_completed_successfully } }
     healthcheck:
       test: ["CMD", "node", "ops/runtime/worker-healthcheck.mjs"]
@@ -85,7 +103,7 @@ services:
       start_period: 20s
       retries: 3
     cpus: 0.2
-    mem_limit: 128m
+    mem_limit: 256m
 
   caddy:
     image: caddy:2.11.2-alpine
@@ -156,6 +174,8 @@ secrets:
   database_url: { file: ./deploy/secrets/database_url }
   nextauth_secret: { file: ./deploy/secrets/nextauth_secret }
   instagram_token: { file: ./deploy/secrets/instagram_token }
+  instagram_app_secret: { file: ./deploy/secrets/instagram_app_secret }
+  instagram_webhook_verify_token: { file: ./deploy/secrets/instagram_webhook_verify_token }
   restic_password: { file: ./deploy/secrets/restic_password }
   s3_access_key: { file: ./deploy/secrets/s3_access_key }
   s3_secret_key: { file: ./deploy/secrets/s3_secret_key }

@@ -11,7 +11,7 @@ RUN npm ci --ignore-scripts && node node_modules/@prisma/engines/scripts/postins
 FROM dependencies AS builder
 COPY . .
 ENV PULSO_STANDALONE=1 NODE_OPTIONS=--max-old-space-size=2048
-RUN npm run build
+RUN npm run build && npm run worker:build
 
 FROM node:24-bookworm-slim AS runtime
 WORKDIR /app
@@ -20,6 +20,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
 RUN groupadd --gid 10001 pulso && useradd --uid 10001 --gid pulso --no-create-home pulso
 COPY --from=builder --chown=pulso:pulso /app/.next/standalone ./
 COPY --from=builder --chown=pulso:pulso /app/.next/static ./.next/static
+COPY --from=builder --chown=pulso:pulso /app/dist ./dist
 COPY --chown=pulso:pulso ops/runtime ./ops/runtime
 USER pulso
 ENTRYPOINT ["node", "ops/runtime/entrypoint.mjs"]

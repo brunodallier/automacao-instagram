@@ -1,0 +1,45 @@
+# Usar SEMPRE junto de compose.production.yaml; nenhum serviço publica portas.
+# O conector fica desligado até habilitar explicitamente o perfil tunnel.
+services:
+  worker:
+    networks: !override [application, automation_egress]
+  caddy:
+    ports: !reset []
+    volumes: !override
+      - ./ops/Caddyfile.tunnel:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [application, edge]
+  cloudflared:
+    profiles: [tunnel]
+    image: cloudflare/cloudflared:2026.10.0
+    user: "65532:65532"
+    command: [tunnel, --config, /etc/cloudflared/config.json, --no-autoupdate, run]
+    restart: unless-stopped
+    read_only: true
+    tmpfs: ["/tmp:size=16m,mode=1777"]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    configs: [{ source: tunnel_config, target: /etc/cloudflared/config.json }]
+    secrets: [tunnel_credentials]
+    networks: [edge]
+    depends_on: { caddy: { condition: service_healthy } }
+    healthcheck:
+      test: [CMD, cloudflared, tunnel, --metrics, "127.0.0.1:2000", ready]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+    cpus: 0.2
+    mem_limit: 128m
+    pids_limit: 64
+    logging: { driver: json-file, options: { max-size: "10m", max-file: "3" } }
+networks:
+  edge:
+  automation_egress:
+configs:
+  tunnel_config:
+    file: ./deploy/cloudflare/config.json
+secrets:
+  tunnel_credentials:
+    file: ./deploy/secrets/tunnel_credentials

@@ -162,6 +162,7 @@ test("captura todas as telas do redesign em desktop e celular", async ({
       ["editor", `/automacoes/${automation.id}`, "Editar automação"],
       ["tags", "/tags", "Tags"],
       ["saude", "/saude", "Saúde do sistema"],
+      ["atividades", "/atividades", "Atividades"],
       ["configuracoes", "/configuracoes", "Configurações"],
     ]) {
       await page.goto(route);
@@ -611,6 +612,7 @@ test("protege todas as páginas e APIs sem sessão", async ({
     "/automacoes",
     "/tags",
     "/saude",
+    "/atividades",
     "/configuracoes",
   ]) {
     await page.goto(route);
@@ -618,6 +620,11 @@ test("protege todas as páginas e APIs sem sessão", async ({
   }
   expect((await request.get("/api/tags")).status()).toBe(401);
   expect((await request.get("/api/automacoes")).status()).toBe(401);
+  expect((await request.get("/api/atividades")).status()).toBe(401);
+  expect((await request.post("/api/atividades/fixture/alternativa", {
+    headers: { Origin: "http://localhost:3100" },
+    data: { justification: "Teste de acesso não autorizado" },
+  })).status()).toBe(401);
   expect(
     (
       await request.post("/api/automacoes", {
@@ -899,8 +906,16 @@ test("navegação móvel e páginas futuras funcionam sem ultrapassar a tela", a
   ).toBeVisible();
   await page.goto("/saude");
   await expect(
-    page.getByText("Não iniciado; a consulta de leitura é exibida no painel.", { exact: true }),
+    page.getByText("Nenhum worker confirmou execução recente.", { exact: true }),
   ).toBeVisible();
+  await page.goto("/atividades");
+  await expect(page.getByRole("heading", { name: "Atividades", exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  expect((await page.request.post("/api/atividades/fixture/alternativa", {
+    headers: { Origin: "https://example.invalid" },
+    data: { justification: "Teste de origem externa" },
+  })).status()).toBe(403);
+  await page.screenshot({ path: "test-results/atividades-mobile.png", fullPage: true });
   await page.goto("/configuracoes");
   await expect(page.getByText(email, { exact: true })).toBeVisible();
   expect(

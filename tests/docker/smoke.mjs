@@ -48,7 +48,7 @@ const httpPort = await port();
 const origin = `https://localhost:${httpsPort}`;
 const envFile = join(directory, "test.env");
 writeFileSync(envFile, `PULSO_DOMAIN=localhost\nPULSO_PUBLIC_URL=${origin}\nPULSO_BIND_IP=127.0.0.1\nPULSO_HTTP_PORT=${httpPort}\nPULSO_HTTPS_PORT=${httpsPort}\nPULSO_DB_USER=pulso\nPULSO_DB_NAME=pulso_test\nRESTIC_REPOSITORY=/repository\n`, { mode: 0o600 });
-const values = { postgres_password: password, database_url: `postgresql://pulso:${password}@postgres:5432/pulso_test`, nextauth_secret: auth, instagram_token: "", restic_password: restic, s3_access_key: "", s3_secret_key: "" };
+const values = { postgres_password: password, database_url: `postgresql://pulso:${password}@postgres:5432/pulso_test`, nextauth_secret: auth, instagram_token: "", instagram_app_secret:"",instagram_webhook_verify_token:"",restic_password: restic, s3_access_key: "", s3_secret_key: "" };
 const secrets = {};
 for (const [name, value] of Object.entries(values)) {
   const file = join(directory, name);
@@ -108,7 +108,7 @@ try {
   await compose("up", "-d", "web", "worker", "caddy");
   for (const service of ["web", "worker", "caddy"]) await healthy(service);
   const original = await fingerprint();
-  assert.equal((await sql('SELECT count(*) FROM "_prisma_migrations" WHERE finished_at IS NOT NULL')).trim(), "6");
+  assert.equal((await sql('SELECT count(*) FROM "_prisma_migrations" WHERE finished_at IS NOT NULL')).trim(), "7");
   if (!dump) {
     // Fixtures somente no banco descartável, criadas pelo comando oficial do projeto.
     await compose("run", "--rm", "tools", "node", "node_modules/tsx/dist/cli.mjs", "-e", "import { randomBytes } from 'node:crypto'; import { createDatabaseClient } from './src/lib/db.ts'; import { configureFirstOwner } from './src/lib/bootstrap-owner.ts'; const db=createDatabaseClient(process.env.DATABASE_URL!); (async()=>{await configureFirstOwner(db,{name:'Teste Docker',email:'docker@example.invalid',password:'Aa1!'+randomBytes(4).toString('hex'),workspaceName:'Teste Docker'});await db.$disconnect()})()");
@@ -165,7 +165,7 @@ try {
   assert.ok(!web.Config.Env.some((v) => /^INSTAGRAM_ACCESS_TOKEN=.+/.test(v)));
   const worker = await inspect("worker");
   assert.equal(worker.HostConfig.RestartPolicy.Name, "unless-stopped");
-  assert.ok(!worker.Mounts.some((v) => v.Destination.includes("instagram")));
+  assert.ok(!worker.Mounts.some((v) => v.Destination.includes("app_secret")));
   const health = JSON.parse(await compose("exec", "-T", "worker", "node", "-e", "console.log(require('fs').readFileSync('/tmp/pulso-worker-health.json','utf8'))"));
   assert.equal(health.mode, "standby"); assert.equal(health.executionEnabled, false);
   await compose("exec", "-T", "worker", "node", "-e", "const fs=require('fs');for(const p of fs.readdirSync('/proc').filter(v=>/^\\d+$/.test(v))){try{if(fs.readFileSync('/proc/'+p+'/cmdline','utf8').split('\\0')[1]==='ops/runtime/worker.mjs')process.kill(Number(p),'SIGKILL')}catch{}} ");

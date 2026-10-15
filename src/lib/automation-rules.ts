@@ -110,12 +110,7 @@ export function activationIssues(draft: AutomationDraft): DraftIssue[] {
     const path = `steps.${index}`;
     if (step.kind === "SEND_DM" || step.kind === "BUTTONS") {
       issues.push(...messageIssues(step, path, initial));
-      if (!initial)
-        issues.push({
-          path: `${path}.text`,
-          message:
-            "Esta DM subsequente deve aguardar uma resposta elegível do destinatário e a janela de 24 horas. Vincule-a a um botão de continuação quando possível.",
-        });
+      // O motor persiste WAITING_INTERACTION e só continua após webhook elegível.
       initial = false;
     } else if (step.kind === "ADD_TAG" && !step.tagId)
       issues.push({

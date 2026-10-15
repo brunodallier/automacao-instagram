@@ -227,7 +227,7 @@ describe("limites e regras de mensagem", () => {
       expect.objectContaining({ path: "steps.1.buttons.0.label" }),
     );
   });
-  it("não confirma botões na Private Reply inicial nem segunda DM automática", () => {
+  it("rejeita botões iniciais e permite a segunda DM que o motor aguardará", () => {
     const value = draft();
     value.steps = [
       {
@@ -246,10 +246,9 @@ describe("limites e regras de mensagem", () => {
     expect(activationIssues(value)).toContainEqual(
       expect.objectContaining({ path: "steps.0.buttons.0.nextMessage" }),
     );
-    expect(activationIssues(value)).toContainEqual(
+    expect(activationIssues(value)).not.toContainEqual(
       expect.objectContaining({
         path: "steps.1.text",
-        message: expect.stringContaining("24 horas"),
       }),
     );
   });

@@ -2,7 +2,7 @@
 
 Esta etapa consulta exclusivamente o perfil autorizado por **Instagram API with Instagram Login**, em `graph.instagram.com`. Não utiliza Facebook Login, Page Access Token ou Instagram Basic Display.
 
-A etapa seguinte de leitura já oferece [sincronização e seleção de Reels](REELS.md), reutilizando a mesma configuração privada. Os limites abaixo sobre ausência de envios, webhooks e renovação automática continuam válidos.
+A etapa seguinte de leitura oferece [sincronização e seleção de Reels](REELS.md), reutilizando a mesma configuração privada. O motor foi implementado posteriormente: [INSTAGRAM-MVP.md](INSTAGRAM-MVP.md). As consultas descritas nesta página continuam somente de leitura e não habilitam execução. Renovação automática permanece pendente.
 
 ## Configuração local
 
@@ -28,7 +28,7 @@ O valor do token não é enviado ao navegador, armazenado no PostgreSQL, copiado
 
 As permissões `instagram_business_manage_comments` e `instagram_business_manage_messages` não são exercitadas nesta etapa. Ler o perfil comprova acesso básico naquele momento; não comprova capacidade de enviar mensagens, comentar, receber eventos ou executar automações. Não são consultados inbox, comentários, seguidores, mídia ou insights.
 
-O indicador global informa **Envios desabilitados**. O resultado da leitura fica na seção Conexão Instagram do painel; isso evita que um rótulo fixo de conexão no cabeçalho contradiga a consulta atual.
+O indicador global informa **Envios desabilitados** por padrão. Modos configurados de execução aparecem como **Teste controlado** ou **Execução configurada**, sem afirmar entrega ou prontidão da Meta. O resultado da leitura fica na seção Conexão Instagram; a página Saúde informa separadamente worker/fila/webhook.
 
 ## Estados e recuperação
 
@@ -50,7 +50,7 @@ Se o navegador não conseguir atualizar a consulta, o painel identifica a falha 
 
 `InstagramCredentialProvider.getCredential()` separa a origem privada da credencial do cliente de leitura. A implementação atual resolve o token do ambiente a cada consulta. Um provedor futuro poderá recuperar o token renovado de um cofre sem alterar a projeção pública ou o endpoint de leitura.
 
-Renovação precisará de uma operação própria no servidor, armazenamento seguro, controle de concorrência, metadados de emissão/expiração e reconexão quando aplicável. A consulta `/me` não retorna validade temporal do token; o Pulso não assume prazo de expiração, não simula renovação e não troca tokens automaticamente. Segredos de aplicativo não são necessários nem solicitados nesta entrega. Também não há OAuth no Pulso, scheduler, endpoint de refresh, envio, webhooks ou mudanças nas regras do editor.
+Renovação precisará de uma operação própria no servidor, armazenamento seguro, controle de concorrência, metadados de emissão/expiração e reconexão quando aplicável. A consulta `/me` não retorna validade temporal; o Pulso não assume prazo, não simula renovação nem troca tokens automaticamente. App Secret não é necessário para leitura; é necessário para verificar assinaturas do webhook implementado posteriormente. OAuth e endpoint de refresh continuam pendentes. O provider do worker relê o arquivo privado, permitindo substituir a credencial sem guardá-la no banco.
 
 ## Testes
 

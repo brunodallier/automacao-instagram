@@ -16,6 +16,7 @@ import { EmptyState, PageHeading } from "@/components/ui";
 import { InstagramConnectionServer } from "@/components/instagram-connection-server";
 import { requireOwner } from "@/lib/session";
 import { db } from "@/lib/db";
+import { executionOverview } from "@/lib/instagram/execution/activity";
 
 export const metadata: Metadata = { title: "Painel principal" };
 const metrics = [
@@ -35,15 +36,22 @@ const metrics = [
     description: "Aceite de envio pela Meta",
   },
   {
-    label: "Falhas registradas",
+    label: "Execuções com atenção",
     icon: ShieldAlert,
-    description: "Execuções que precisam de atenção",
+    description: "Falhas e resultados em revisão",
   },
 ];
 
 export default async function Dashboard() {
   const { workspace } = await requireOwner();
   const tagCount = await db.tag.count({ where: { workspaceId: workspace.id } });
+  const overview = await executionOverview(db, workspace.id);
+  const metricValues = [
+    overview.active,
+    overview.comments,
+    overview.accepted,
+    overview.failures,
+  ];
   return (
     <>
       <div className="dashboard-overview">
@@ -73,13 +81,15 @@ export default async function Dashboard() {
           </div>
         </div>
         <section className="metric-grid" aria-label="Métricas de automação">
-          {metrics.map(({ label, icon: Icon, description }) => (
+          {metrics.map(({ label, icon: Icon, description }, index) => (
             <div className="metric-card" key={label}>
               <div className="metric-top">
                 <span>{label}</span>
                 <Icon size={18} strokeWidth={1.6} aria-hidden="true" />
               </div>
-              <strong className="metric-value">0</strong>
+              <strong className="metric-value">
+                {metricValues[index] ?? "—"}
+              </strong>
               <p>{description}</p>
             </div>
           ))}
@@ -174,8 +184,8 @@ export default async function Dashboard() {
         </aside>
       </div>
       <p className="data-caption">
-        As métricas permanecem zeradas enquanto o motor de automações não está
-        disponível. A verificação de leitura não habilita envios.
+        As métricas refletem os registros de execução. Aceitação pela API não
+        comprova entrega. A verificação de leitura não habilita envios.
       </p>
     </>
   );

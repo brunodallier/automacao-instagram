@@ -76,6 +76,31 @@ export function AutomationTable({
       setOpenId(null);
     }
   }
+  async function pause(item: AutomationItem) {
+    setPending(item.id);
+    setError("");
+    try {
+      const response = await fetch(`/api/automacoes/${item.id}/pausar`, {
+        method: "POST",
+        headers: { Origin: window.location.origin },
+      });
+      if (!response.ok)
+        throw Error(
+          (await response.json()).error ?? "Não foi possível pausar.",
+        );
+      const updated = await response.json();
+      setItems((current) =>
+        current.map((value) => (value.id === item.id ? updated : value)),
+      );
+    } catch (reason) {
+      setError(
+        reason instanceof Error ? reason.message : "Não foi possível pausar.",
+      );
+    } finally {
+      setPending(null);
+      setOpenId(null);
+    }
+  }
   return (
     <section className="card automation-list">
       <div className="section-heading">
@@ -175,6 +200,14 @@ export function AutomationTable({
                         <Link href={`/automacoes/${item.id}`}>
                           <Pencil size={14} /> Editar
                         </Link>
+                        {item.status === "ACTIVE" ? (
+                          <button
+                            onClick={() => pause(item)}
+                            disabled={pending === item.id}
+                          >
+                            Pausar automação
+                          </button>
+                        ) : null}
                         <button
                           onClick={() => remove(item)}
                           disabled={pending === item.id}

@@ -1,0 +1,21 @@
+{
+  "hostname": "pulso.example.com",
+  "ownerEmail": "owner@example.com",
+  "teamName": "TEAM_NAME_FROM_CLOUDFLARE",
+  "accountId": "ACCOUNT_ID_FROM_CLOUDFLARE",
+  "tunnelId": "TUNNEL_UUID_FROM_CLOUDFLARE",
+  "app": {
+    "type": "self_hosted",
+    "domain": "pulso.example.com",
+    "aud": "AUDIENCE_FROM_CLOUDFLARE",
+    "allowed_idps": ["OTP_ID_FROM_CLOUDFLARE"],
+    "allow_authenticate_via_warp": false
+  },
+  "policies": [{ "decision": "allow", "include": [{ "email": { "email": "owner@example.com" } }], "exclude": [], "require": [] }],
+  "identityProviders": [{ "id": "OTP_ID_FROM_CLOUDFLARE", "type": "onetimepin" }],
+  "credentials": {
+    "AccountTag": "ACCOUNT_ID_FROM_CLOUDFLARE",
+    "TunnelID": "TUNNEL_UUID_FROM_CLOUDFLARE",
+    "TunnelSecret": "STORE_ONLY_REAL_SECRET_IN_PRIVATE_FILE"
+  }
+}

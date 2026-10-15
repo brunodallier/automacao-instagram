@@ -42,6 +42,12 @@ const navigation = [
     group: "Gerenciamento",
   },
   {
+    href: "/atividades",
+    label: "Atividades",
+    icon: Activity,
+    group: "Gerenciamento",
+  },
+  {
     href: "/configuracoes",
     label: "Configurações",
     icon: Settings2,
@@ -74,10 +80,12 @@ export function AppShell({
   children,
   user,
   workspaceName,
+  executionLabel,
 }: {
   children: React.ReactNode;
   user: { name: string; email: string };
   workspaceName: string;
+  executionLabel: string;
 }) {
   const pathname = usePathname();
   const mobileMenu = useRef<HTMLDialogElement>(null);
@@ -161,7 +169,7 @@ export function AppShell({
           <div className="topbar-status">
             <Instagram size={16} aria-hidden="true" />
             <span>Instagram</span>
-            <Badge>Envios desabilitados</Badge>
+            <Badge>{executionLabel}</Badge>
           </div>
         </header>
         <main id="conteudo" className="main-content">

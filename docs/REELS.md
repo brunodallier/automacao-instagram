@@ -10,7 +10,7 @@ Esta etapa usa a conexão Instagram Login já configurada no Pulso. Não exige o
 
 O editor também tem **Sincronizar Reels**, que atualiza a lista sem recarregar ou apagar a edição em andamento. O escopo específico é habilitado quando o workspace tem Reels sincronizados. A lista apresenta 30 itens por vez, com **Mostrar mais Reels**; isso é uma paginação visual e não limita a sincronização ou a pesquisa. A seleção admite até 1.000 itens por rascunho. Nome, mensagens e outros campos incompletos continuam permitidos no rascunho.
 
-A regra de prioridade das automações específicas sobre as globais foi preservada em uma função pura para candidatas já elegíveis, com teste. O futuro motor deverá primeiro validar workspace, conta, Reel, palavras-chave e demais condições de elegibilidade. Nenhuma automação é ativada ou executada nesta etapa; DMs, respostas públicas reais e webhooks permanecem desabilitados.
+A regra de prioridade das automações específicas sobre as globais foi preservada em uma função pura para candidatas já elegíveis, com teste. O motor implementado valida workspace, conta, Reel, palavras-chave e demais condições antes dessa escolha. Seus testes isolados estão em [INSTAGRAM-MVP.md](INSTAGRAM-MVP.md). Envios/webhooks reais continuam bloqueados; perfil e Reels confirmados não comprovam prontidão para enviar.
 
 ## API e identificação
 

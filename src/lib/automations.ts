@@ -11,6 +11,11 @@ import {
 } from "@/lib/validation";
 import { readStoredStep, readPublicReplies } from "@/lib/automation-draft";
 import { activationIssues } from "@/lib/automation-rules";
+import {
+  executionSettings,
+  type ExecutionSettings,
+} from "@/lib/instagram/execution/config";
+import { executionReadiness } from "@/lib/instagram/execution/readiness";
 
 export class AutomationError extends Error {
   constructor(
@@ -195,7 +200,10 @@ function mapAutomation(automation: AutomationWithDetails) {
   };
 }
 
-export function automationService(client: PrismaClient) {
+export function automationService(
+  client: PrismaClient,
+  execution: ExecutionSettings = executionSettings(),
+) {
   return {
     async list(workspaceId: string) {
       const items = await client.automation.findMany({
@@ -358,10 +366,58 @@ export function automationService(client: PrismaClient) {
           400,
           issues,
         );
-      throw new AutomationError(
-        "A ativação depende da integração com o Instagram, ainda não implementada.",
-        409,
+      const readiness = await executionReadiness(
+        client,
+        workspaceId,
+        execution,
       );
+      if (!readiness.ready) throw new AutomationError(readiness.reason, 409);
+      if (draft.scope === "SPECIFIC_REELS") {
+        const selected = await client.instagramReel.count({
+          where: {
+            id: { in: draft.reelIds },
+            socialAccountId: readiness.accountId,
+          },
+        });
+        if (selected !== draft.reelIds?.length)
+          throw new AutomationError(
+            "Selecione somente Reels da conta autorizada.",
+            400,
+          );
+      }
+      return client.$transaction(async (tx) => {
+        const changed = await tx.automation.updateMany({
+          where: { id, workspaceId, updatedAt: item.updatedAt },
+          data: { status: "ACTIVE" },
+        });
+        if (!changed.count)
+          throw new AutomationError(
+            "A automação mudou. Reabra e revise antes de ativar.",
+            409,
+          );
+        await tx.instagramAutomationState.upsert({
+          where: { automationId: id },
+          create: { automationId: id, activatedAt: new Date() },
+          update: { activatedAt: new Date() },
+        });
+        return mapAutomation(
+          await tx.automation.findUniqueOrThrow({ where: { id }, include }),
+        );
+      });
+    },
+    async pause(workspaceId: string, id: string) {
+      validateId(id);
+      try {
+        return mapAutomation(
+          await client.automation.update({
+            where: { id, workspaceId },
+            data: { status: "PAUSED" },
+            include,
+          }),
+        );
+      } catch (error) {
+        errorFromDatabase(error);
+      }
     },
   };
 }

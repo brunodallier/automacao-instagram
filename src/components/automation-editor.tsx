@@ -44,6 +44,7 @@ type EditorStep = AutomationStepDraft & { editorKey: string };
 type EditorState = Omit<AutomationDraft, "steps"> & { steps: EditorStep[] };
 type SavedAutomation = {
   id: string;
+  status?: "DRAFT" | "ACTIVE" | "PAUSED" | "ERROR";
   name: string;
   scope: AutomationDraft["scope"];
   keywords: { id: string; value: string }[];
@@ -126,6 +127,9 @@ export function AutomationEditor({
   } | null>(null);
   const [savedId, setSavedId] = useState(automation?.id ?? "");
   const [saved, setSaved] = useState(false);
+  const [executionStatus, setExecutionStatus] = useState(
+    automation?.status ?? "DRAFT",
+  );
   const [testMode, setTestMode] = useState(false);
   const [showErrors, setShowErrors] = useState(false);
   const revision = useRef(0);
@@ -229,6 +233,7 @@ export function AutomationEditor({
       if (!response.ok)
         throw new Error(data?.error ?? "Não foi possível salvar o rascunho.");
       setSavedId(data.id);
+      setExecutionStatus("DRAFT");
       const currentVersionSaved = revision.current === savingRevision;
       setSaved(currentVersionSaved);
       setFeedback({
@@ -246,6 +251,48 @@ export function AutomationEditor({
           reason instanceof Error
             ? reason.message
             : "Não foi possível salvar o rascunho.",
+      });
+    } finally {
+      setPending(false);
+    }
+  }
+  async function activate() {
+    setShowErrors(true);
+    if (issues.length) {
+      setFeedback({
+        type: "error",
+        text: "Revise as pendências antes de ativar.",
+      });
+      return;
+    }
+    if (!savedId || !saved) {
+      setFeedback({
+        type: "info",
+        text: "Salve a versão atual do rascunho antes de ativar.",
+      });
+      return;
+    }
+    setPending(true);
+    setFeedback(null);
+    try {
+      const response = await fetch(`/api/automacoes/${savedId}/ativar`, {
+        method: "POST",
+        headers: { Origin: window.location.origin },
+      });
+      if (!response.ok)
+        throw Error(
+          (await response.json()).error ?? "Não foi possível ativar.",
+        );
+      setExecutionStatus("ACTIVE");
+      setFeedback({
+        type: "success",
+        text: "Automação ativada. A execução continuará respeitando as regras e a disponibilidade da Meta.",
+      });
+    } catch (reason) {
+      setFeedback({
+        type: "error",
+        text:
+          reason instanceof Error ? reason.message : "Não foi possível ativar.",
       });
     } finally {
       setPending(false);
@@ -276,7 +323,13 @@ export function AutomationEditor({
         </Link>
         <div className="editor-actions">
           <span className="draft-state">
-            {pending ? "Salvando…" : saved ? "Salvo agora" : "Rascunho"}
+            {pending
+              ? "Processando…"
+              : executionStatus === "ACTIVE"
+                ? "Ativa"
+                : saved
+                  ? "Salvo agora"
+                  : "Rascunho"}
           </span>
           <button className="button button-secondary" onClick={testFlow}>
             <WandSparkles size={16} /> Testar rascunho
@@ -292,6 +345,13 @@ export function AutomationEditor({
               <Save size={16} />
             )}{" "}
             Salvar rascunho
+          </button>
+          <button
+            className="button button-secondary"
+            onClick={activate}
+            disabled={pending || executionStatus === "ACTIVE"}
+          >
+            <Send size={16} /> Ativar
           </button>
         </div>
       </div>
@@ -750,7 +810,7 @@ export function AutomationEditor({
                     ? "Revise " +
                       issues.length +
                       " pendência(s) na prévia. O rascunho pode ser salvo."
-                    : "Campos completos. A ativação ainda depende da integração com o Instagram.",
+                    : "Campos completos. Salve e ative quando a integração e os envios estiverem autorizados.",
                 });
               }}
             >

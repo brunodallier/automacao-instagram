@@ -33,7 +33,7 @@ const messages: Record<InstagramConnectionStatus, string> = {
   CONFIGURATION_ERROR:
     "Revise a configuração local do Instagram e reinicie o servidor.",
   CONNECTED:
-    "A API oficial confirmou o acesso de leitura ao perfil. Envios e webhooks continuam desabilitados.",
+    "A API oficial confirmou o acesso de leitura ao perfil. Consulte Saúde para verificar a disponibilidade da execução de automações.",
   TOKEN_EXPIRED:
     "A Meta informou que o token expirou. Substitua-o no ambiente local e reinicie o servidor.",
   AUTHENTICATION_ERROR:

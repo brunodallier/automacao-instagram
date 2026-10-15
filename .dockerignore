@@ -4,6 +4,7 @@
 **/.env
 **/.env.*
 node_modules
+dist
 .next
 .tmp
 tmp
@@ -24,5 +25,9 @@ src/generated
 deploy/secrets
 deploy/backups
 deploy/production.env
+deploy/cloudflare
 **/*.private
+**/*.private.json
+**/__pycache__
+**/*.py[cod]
 **/*.tsbuildinfo

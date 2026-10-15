@@ -1,6 +1,6 @@
 # Pulso em Docker — preparação para Hostinger KVM 2
 
-Esta configuração prepara uma VPS Linux com 2 vCPUs e 8 GB de RAM. **Nenhum servidor foi contratado ou configurado nesta entrega.** O `compose.yaml` de desenvolvimento e a conexão do localhost permanecem independentes. Use somente `compose.production.yaml` para produção, com projeto `pulso` e arquivo `deploy/production.env` explícitos.
+Esta configuração prepara uma VPS Linux com 2 vCPUs e 8 GB de RAM. A infraestrutura básica da VPS foi preparada, sem implantação ou migração de dados. O `compose.yaml` de desenvolvimento e a conexão do localhost permanecem independentes. A prioridade atual é [HOSTINGER-MVP.md](HOSTINGER-MVP.md), com DNS no Registro.br e `compose.mvp.yaml` adicionando proteção independente ao Caddy. A fase futura de Cloudflare usa [HOSTINGER-PRIVATE.md](HOSTINGER-PRIVATE.md) e `compose.private.yaml`. Nunca combinar os dois overlays ou iniciar o Caddy público básico sem a proteção adicional.
 
 ## Serviços e limites
 
@@ -8,14 +8,14 @@ Esta configuração prepara uma VPS Linux com 2 vCPUs e 8 GB de RAM. **Nenhum se
 | --- | --- | --- | --- |
 | web | Next.js standalone, usuário sem privilégios, filesystem somente leitura | 1536 MB | 1 |
 | postgres | PostgreSQL 18.6, UTF8/C.UTF-8, checksums, volume persistente | 2048 MB | 1 |
-| worker | Processo contínuo em **standby**, somente leitura do banco | 128 MB | 0,2 |
+| worker | Standby por padrão; fila persistente quando autorizado/configurado | 256 MB | 0,2 |
 | caddy | HTTPS e proxy para web | 128 MB | 0,25 |
 | backup, opcional | Dump oficial e backup Restic criptografado | 512 MB | 0,25 |
 | migrate, temporário | `prisma migrate deploy`, antes de iniciar web/worker | 768 MB | 0,5 |
 
-Os tetos dos serviços permanentes somam 4,25 GiB com backup, deixando margem para Linux, Docker e cache de disco. Tetos de CPU são limites individuais compartilhados pelas duas vCPUs; não são reservas. O pool web usa até cinco conexões e o worker uma; PostgreSQL aceita até 40. O build limita o heap Node a 2 GB e o paralelismo Next a dois workers. Evite builds simultâneos, preferindo construir uma imagem por release antes de atualizar os serviços.
+Os tetos dos serviços permanentes somam 4,375 GiB com backup no Compose básico, ou 4,5 GiB com Caddy do overlay MVP, deixando margem para Linux, Docker e cache de disco. Tetos de CPU são limites individuais compartilhados pelas duas vCPUs; não são reservas. O pool web usa até cinco conexões e o worker uma; PostgreSQL aceita até 40. O build limita o heap Node a 2 GB e o paralelismo Next a dois workers. Evite builds simultâneos, preferindo construir uma imagem por release antes de atualizar os serviços.
 
-Isso é um ponto de partida para esta instalação privada, sem promessa de capacidade de envios ou alta disponibilidade. Worker, banco e aplicação estarão no mesmo servidor. Um processo de worker ativo não significa processamento de automações: nesta etapa não há fila, execução de jobs, webhooks ou envios reais. O worker não recebe token Instagram, usa sessões SQL somente leitura e só confirma disponibilidade/UTF8. A implementação futura de execução exigirá outra entrega.
+Isso é um ponto de partida para esta instalação privada, sem promessa de capacidade de envios ou alta disponibilidade. Worker, banco e aplicação estarão no mesmo servidor. O modo padrão `disabled` continua em standby com leitura do banco. O worker de execução foi implementado e testado com API simulada; exige modo controlado ou live autorizado, configuração e schema novos. Ele recebe somente token Instagram e banco, sem App Secret ou segredo de sessão. Possui saída dedicada para Graph; PostgreSQL permanece interno. [Fluxos e bloqueios para a validação real](INSTAGRAM-MVP.md).
 
 ## Preparação futura da VPS
 
@@ -40,6 +40,8 @@ Crie estes arquivos com um editor local seguro, sem `echo` de credenciais, hist�
 | database_url | `postgresql://USUARIO:SENHA_CODIFICADA@postgres:5432/BANCO` |
 | nextauth_secret | Segredo de sessão aleatório com pelo menos 32 caracteres |
 | instagram_token | Token já autorizado, copiado privadamente; pode ficar vazio para iniciar sem integração |
+| instagram_app_secret | App Secret do aplicativo Meta; pode ficar vazio com webhooks bloqueados |
+| instagram_webhook_verify_token | Segredo independente do desafio; pode ficar vazio com webhooks bloqueados |
 | restic_password | Senha aleatória exclusiva do backup, guardada também fora da VPS |
 | s3_access_key | Chave do armazenamento externo S3 compatível |
 | s3_secret_key | Segredo do armazenamento externo |
@@ -49,8 +51,8 @@ Os três últimos são necessários somente ao habilitar o perfil `backup`. Gere
 O Compose monta arquivos locais como secrets, **não oferece criptografia destes arquivos no host**. Restrinja o diretório a quem opera o servidor. Para web, worker e tools, o UID do container é 10001; deixe seus arquivos legíveis somente por esse UID. Os arquivos PostgreSQL/backup são lidos por processos privilegiados dentro desses containers:
 
 ```bash
-sudo chown 10001:10001 deploy/secrets/database_url deploy/secrets/nextauth_secret deploy/secrets/instagram_token
-sudo chmod 400 deploy/secrets/database_url deploy/secrets/nextauth_secret deploy/secrets/instagram_token
+sudo chown 10001:10001 deploy/secrets/database_url deploy/secrets/nextauth_secret deploy/secrets/instagram_token deploy/secrets/instagram_app_secret deploy/secrets/instagram_webhook_verify_token
+sudo chmod 400 deploy/secrets/database_url deploy/secrets/nextauth_secret deploy/secrets/instagram_token deploy/secrets/instagram_app_secret deploy/secrets/instagram_webhook_verify_token
 sudo chown root:root deploy/secrets/postgres_password
 sudo chmod 400 deploy/secrets/postgres_password
 # Após criar os segredos de backup:
@@ -111,7 +113,7 @@ Todos os serviços permanentes usam `restart: unless-stopped`; após falha/saíd
 
 Docker marcar `unhealthy` **não reinicia sozinho** um processo ainda ativo. Acompanhar `dc ps -a`, configurar monitoramento externo de HTTPS/disponibilidade e alertas de backup na implantação. Não há monitor remoto configurado nesta etapa.
 
-Logs têm rotação `json-file`, 10 MB × 3 por container. Caddy remove cabeçalhos, URI e cabeçalhos de resposta do log de acesso; worker/backup usam eventos genéricos. O token permanece em memória somente no servidor web e não é recebido pelo worker. Não habilitar logs SQL, debug de credenciais, `set -x` ou dumps de ambiente.
+Logs têm rotação `json-file`, 10 MB × 3 por container. Caddy remove cabeçalhos, URI e cabeçalhos de resposta do log de acesso; worker/backup usam eventos genéricos. O token permanece somente nos processos web/worker que precisam da Graph API; não entra na imagem, banco, URLs ou logs. Não habilitar logs SQL, debug de credenciais, `set -x` ou dumps de ambiente.
 
 ```bash
 dc logs --tail 100 web worker caddy
@@ -163,6 +165,8 @@ Nunca executar `down -v`, `docker volume prune` ou `docker system prune --volume
 ```bash
 npm run test:runtime
 npm run test:docker
+npm run test:execution
+npm run test:worker
 # Opcional: validar uma cópia integral do banco usando dump privado já verificado:
 npm run test:docker -- --dump /CAMINHO-PRIVADO/pulso.dump
 ```
@@ -172,5 +176,7 @@ No Windows com Engine nativo no WSL, iniciá-lo previamente com `wsl -d Ubuntu-2
 Com **Docker Desktop em execução no Windows**, utilizar diretamente `npm run test:docker` no PowerShell, sem `--wsl`. Não é necessário habilitar a integração com a distribuição Ubuntu para este fluxo. O teste foi verificado também com Docker Desktop 4.95.0, Engine 29.8.2 e Compose 5.6.0. O Engine nativo do Ubuntu usado no ensaio anterior continua independente; os testes no Desktop não reiniciam o daemon nem os outros projetos. Os arquivos privados do ensaio são criados em diretório temporário e os recursos Docker recebem um nome de projeto aleatório exclusivo.
 
 Além da inicialização, o ensaio verifica entrega de CSS/JavaScript, páginas protegidas, IDs dos Reels do workspace, criação/edição/reabertura de rascunho incompleto e seleção de Reels específicos. Essas gravações são removidas da cópia de teste antes da comparação integral e do backup. O worker permanece em standby e o token Instagram de teste permanece vazio.
+
+O ensaio separado `test:worker` valida o worker compilado que vai para a imagem, fila, webhook assinado, mensagens públicas/privadas e botões contra uma Graph simulada em HTTPS. A rede de execução não tem internet e usa exclusivamente credenciais fictícias. Executar suites Docker sequencialmente. O build usa esbuild com dependências necessárias incluídas; não depende de `tsx` no container runtime.
 
 Referências: [Next.js standalone](https://nextjs.org/docs/app/api-reference/config/next-config-js/output), [Compose em produção](https://docs.docker.com/compose/how-tos/production/), [secrets locais](https://docs.docker.com/compose/how-tos/use-secrets/), [políticas de reinício](https://docs.docker.com/engine/containers/start-containers-automatically/), [HTTPS do Caddy](https://caddyserver.com/docs/automatic-https), [repositórios Restic](https://restic.readthedocs.io/en/stable/030_preparing_a_new_repo.html).

@@ -1,0 +1,8 @@
+# Preparado, NÃO habilitado. Somente com os overlays production + mvp.
+# DNS/publicação do hostname e configuração na Meta exigem autorização posterior.
+services:
+  caddy:
+    environment:
+      PULSO_WEBHOOK_DOMAIN: ${PULSO_WEBHOOK_DOMAIN:?Configure o hostname separado SOMENTE após autorização}
+    volumes:
+      - ./ops/Caddyfile.meta-webhooks:/etc/caddy/meta-webhooks.d/instagram.caddy:ro

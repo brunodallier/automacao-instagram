@@ -1,0 +1,29 @@
+# MVP com DNS no Registro.br. Usar somente junto de compose.production.yaml.
+# Não combinar com compose.private.yaml (fase futura com Cloudflare Tunnel).
+services:
+  web:
+    networks: !override [application, edge]
+  worker:
+    networks: !override [application, automation_egress]
+  caddy:
+    volumes: !override
+      - ./ops/Caddyfile.mvp:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    secrets: [panel_users]
+    networks: !override [edge]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    pids_limit: 128
+    mem_limit: 256m
+  backup:
+    networks: !override [application, edge]
+networks:
+  application:
+    internal: true
+  edge:
+  automation_egress:
+secrets:
+  panel_users:
+    file: ./deploy/secrets/panel_users

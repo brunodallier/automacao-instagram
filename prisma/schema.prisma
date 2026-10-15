@@ -65,6 +65,7 @@ model Workspace {
   tags         Tag[]
   socialAccounts SocialAccount[]
   automations  Automation[]
+  executions InstagramAutomationRun[]
 }
 
 model WorkspaceMembership {
@@ -89,6 +90,7 @@ model Tag {
   updatedAt      DateTime  @updatedAt @db.Timestamptz(3)
   workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   automationSteps AutomationStep[]
+  contacts InstagramContactTag[]
 
   @@unique([workspaceId, normalizedName])
   @@index([workspaceId, createdAt])
@@ -109,6 +111,8 @@ model Automation {
   keywords       AutomationKeyword[]
   steps          AutomationStep[]
   reels          AutomationReel[]
+  executionState InstagramAutomationState?
+  executions InstagramAutomationRun[]
 
   @@index([workspaceId, updatedAt])
   @@index([workspaceId, status])
@@ -173,6 +177,11 @@ model SocialAccount {
   workspace   Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   reelsSyncedAt DateTime? @db.Timestamptz(3)
   reels InstagramReel[]
+  webhookEvents InstagramWebhookEvent[]
+  executions InstagramAutomationRun[]
+  contacts InstagramContact[]
+  jobs InstagramJob[]
+  workerState InstagramWorkerState?
 
   @@unique([workspaceId, platform, externalId])
   @@index([workspaceId])
@@ -204,4 +213,156 @@ model LoginRateLimit {
   key       String   @id
   attempts  Int      @default(1)
   expiresAt DateTime @db.Timestamptz(3)
+}
+
+// Modelos aditivos: nenhum campo dos rascunhos ou proprietário é substituído.
+model InstagramAutomationState {
+  automationId String @id
+  activatedAt DateTime @db.Timestamptz(3)
+  publicReplyCursor Int @default(0)
+  automation Automation @relation(fields: [automationId], references: [id], onDelete: Cascade)
+}
+
+model InstagramWebhookEvent {
+  id String @id @default(cuid())
+  socialAccountId String
+  eventKey String @unique @db.VarChar(64)
+  kind String @db.VarChar(32)
+  occurredAt DateTime @db.Timestamptz(3)
+  data Json
+  processedAt DateTime? @db.Timestamptz(3)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  socialAccount SocialAccount @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
+  jobs InstagramJob[]
+  @@index([socialAccountId, createdAt])
+}
+
+model InstagramContact {
+  id String @id @default(cuid())
+  socialAccountId String
+  recipientId String @db.VarChar(120)
+  lastInteractionAt DateTime? @db.Timestamptz(3)
+  interactionKind String? @db.VarChar(32)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  socialAccount SocialAccount @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
+  tags InstagramContactTag[]
+  @@unique([socialAccountId, recipientId])
+}
+
+model InstagramContactTag {
+  contactId String
+  tagId String
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  contact InstagramContact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  tag Tag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  @@id([contactId, tagId])
+}
+
+model InstagramAutomationRun {
+  id String @id @default(cuid())
+  workspaceId String
+  socialAccountId String
+  automationId String?
+  automationUpdatedAt DateTime @db.Timestamptz(3)
+  commentId String @db.VarChar(120)
+  mediaId String @db.VarChar(120)
+  commentCreatedAt DateTime @db.Timestamptz(3)
+  recipientId String? @db.VarChar(120)
+  snapshot Json
+  state String @default("RUNNING") @db.VarChar(32)
+  initialStatus String @default("PENDING") @db.VarChar(32)
+  cursor Int @default(0)
+  pendingMessage Json?
+  pendingPath String? @db.VarChar(120)
+  resumeAt DateTime? @db.Timestamptz(3)
+  pendingTags Json
+  publicText String? @db.Text
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  socialAccount SocialAccount @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
+  automation Automation? @relation(fields: [automationId], references: [id], onDelete: SetNull)
+  jobs InstagramJob[]
+  outbounds InstagramOutbound[]
+  activities InstagramActivity[]
+  @@unique([socialAccountId, commentId])
+  @@index([workspaceId, createdAt])
+  @@index([socialAccountId, recipientId, state])
+}
+
+model InstagramOutbound {
+  id String @id @default(cuid())
+  runId String
+  operationKey String @unique @db.VarChar(200)
+  kind String @db.VarChar(32)
+  body Json
+  status String @default("PLANNED") @db.VarChar(32)
+  attempts Int @default(0)
+  dispatchToken String? @db.VarChar(64)
+  dispatchedAt DateTime? @db.Timestamptz(3)
+  acceptedAt DateTime? @db.Timestamptz(3)
+  remoteId String? @db.VarChar(300)
+  recipientId String? @db.VarChar(120)
+  errorCategory String? @db.VarChar(40)
+  errorCode Int?
+  errorSubcode Int?
+  fallbackApproved Boolean @default(false)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  run InstagramAutomationRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  continuations InstagramContinuation[]
+  jobs InstagramJob[]
+  @@index([runId, status])
+}
+
+model InstagramContinuation {
+  id String @id @default(cuid())
+  tokenHash String @unique @db.VarChar(64)
+  outboundId String
+  recipientId String @db.VarChar(120)
+  message Json
+  expiresAt DateTime @db.Timestamptz(3)
+  usedAt DateTime? @db.Timestamptz(3)
+  outbound InstagramOutbound @relation(fields: [outboundId], references: [id], onDelete: Cascade)
+  @@index([outboundId])
+}
+
+model InstagramJob {
+  id String @id @default(cuid())
+  socialAccountId String
+  eventId String?
+  runId String?
+  outboundId String?
+  dedupeKey String @unique @db.VarChar(200)
+  kind String @db.VarChar(32)
+  state String @default("READY") @db.VarChar(16)
+  availableAt DateTime @default(now()) @db.Timestamptz(3)
+  attempts Int @default(0)
+  leaseToken String? @db.VarChar(64)
+  leaseUntil DateTime? @db.Timestamptz(3)
+  lastError String? @db.VarChar(40)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  socialAccount SocialAccount @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
+  event InstagramWebhookEvent? @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  run InstagramAutomationRun? @relation(fields: [runId], references: [id], onDelete: Cascade)
+  outbound InstagramOutbound? @relation(fields: [outboundId], references: [id], onDelete: Cascade)
+  @@index([state, availableAt])
+  @@index([leaseUntil])
+}
+
+model InstagramActivity {
+  id String @id @default(cuid())
+  runId String
+  kind String @db.VarChar(40)
+  detail String? @db.VarChar(80)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  run InstagramAutomationRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  @@index([runId, createdAt])
+}
+
+model InstagramWorkerState {
+  socialAccountId String @id
+  heartbeatAt DateTime @db.Timestamptz(3)
+  nextSendAt DateTime @db.Timestamptz(3)
+  mode String @db.VarChar(16)
+  socialAccount SocialAccount @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
 }

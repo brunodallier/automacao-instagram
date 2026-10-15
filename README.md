@@ -1,12 +1,12 @@
 # Pulso · Automação Instagram
 
-Base de uma plataforma privada de automações para Instagram, com interface em português do Brasil. Esta entrega cobre a fundação segura e o editor da Etapa 2.
+Plataforma privada de automações para Instagram, com interface em português do Brasil. O motor do MVP está implementado e testado em ambiente isolado; a validação real na Meta e a implantação continuam pendentes de autorização.
 
-O proprietário pode entrar com segurança, organizar tags e criar rascunhos de automações com persistência em PostgreSQL. O editor tem quatro etapas de configuração: definição e escopo, palavras-chave, respostas públicas e conversa privada. As respostas públicas têm cinco campos inicialmente vazios, variações adicionais em rotação e uma alternativa opcional para falha definitiva da DM. Os botões da conversa têm configuração compacta e podem ser recolhidos quando completos. A prévia interativa atualiza durante a edição e funciona antes de salvar. A verificação de leitura do perfil Instagram está disponível com token local. OAuth dentro do Pulso, webhooks, filas e envio real continuam fora desta etapa.
+O proprietário pode entrar com segurança, organizar tags e criar rascunhos de automações com persistência em PostgreSQL. O editor mantém quatro etapas: definição e escopo, palavras-chave, respostas públicas e conversa privada. Respostas públicas editáveis em rotação, alternativa independente, botões compactos, continuações e simulador foram preservados. Webhook assinado, fila durável, cliente de mensagens/comentários, ativação/pausa e atividades estão implementados. Os envios ficam bloqueados por padrão e não foram testados na conta real. [Capacidades, limites e plano de validação](docs/INSTAGRAM-MVP.md).
 
 Repositório: [brunodallier/automacao-instagram](https://github.com/brunodallier/automacao-instagram).
 
-A preparação Docker de produção para a **Hostinger KVM 2** está descrita em [HOSTINGER-DOCKER.md](docs/HOSTINGER-DOCKER.md): Next.js standalone, PostgreSQL UTF8 persistente, Caddy/HTTPS, worker em espera e backups externos criptografados. O arquivo de produção é separado do Compose e do banco usados no localhost. A implantação remota depende de uma etapa posterior autorizada.
+A preparação Docker para a **Hostinger KVM 2** está descrita em [HOSTINGER-DOCKER.md](docs/HOSTINGER-DOCKER.md): Next.js standalone, PostgreSQL UTF8 persistente, Caddy/HTTPS, worker e backups criptografados. O plano [MVP no Registro.br](docs/HOSTINGER-MVP.md) mantém proteção adicional e login interno, com callback Meta preparado em hostname separado. Banco/configuração locais são independentes. Publicação, DNS e migração remota exigem autorização posterior; o destino externo dos backups ainda precisa ser configurado.
 
 A identidade **pulso.** usa uma composição editorial sobre fundo branco: métricas independentes, separação por espaço em branco e superfícies discretas apenas onde há agrupamento útil. Login, painel, automações, editor, tags, saúde e configurações compartilham os mesmos tokens. O editor mantém suas quatro etapas e os campos compactos. Consulte [o design system](docs/DESIGN-SYSTEM.md) e [o registro de validação](docs/VALIDACAO.md).
 
@@ -104,6 +104,8 @@ Preencha somente `INSTAGRAM_ACCESS_TOKEN` no `.env` local, sem copiar o token pa
 
 A credencial é enviada somente pelo servidor no cabeçalho `Authorization`, sem query string. O perfil confirmado não comprova permissões de mensagens ou comentários. Essa etapa não envia DMs, respostas públicas, cria webhooks, ativa automações ou renova tokens. Os testes de navegador retiram o token real do ambiente de seu servidor.
 
+Para execução, consulte [INSTAGRAM-MVP.md](docs/INSTAGRAM-MVP.md). `INSTAGRAM_SEND_MODE=disabled` e `INSTAGRAM_WEBHOOK_ENABLED=false` são os padrões seguros. App Secret e verify token ficam exclusivamente no ambiente privado. O comando `npm run instagram:webhooks:check` apenas consulta a inscrição; não configura nem envia mensagens. Nenhuma flag é habilitada como consequência de verificar o perfil.
+
 ### Reels reais
 
 Abra **Meus Reels** e clique em **Sincronizar Reels** para consultar todas as páginas de publicações disponíveis pela Meta. O catálogo armazena somente Reels identificados, vinculados à conta e ao workspace. Na Etapa 1 do editor, **Reels específicos** permite pesquisar e selecionar um ou vários vídeos; a seleção é preservada ao salvar/reabrir rascunhos. A mesma sincronização está disponível no editor, sem apagar alterações em andamento. A instalação local sincronizou 87 Reels reais em quatro páginas. [Campos, limitações e recuperação](docs/REELS.md).
@@ -182,7 +184,7 @@ Automações usam a mesma autorização, incluindo a verificação de que tags s
 
 `WorkspaceMembership` prepara a separação de usuários e espaços futuros, mas não oferece cadastro, convite, seleção de workspace ou gestão multiusuário.
 
-Tags têm ID estável e pertencem ao workspace. As etapas de tag referenciam `Tag.id`, nunca seu nome. `AutomationReel` associa o rascunho ao catálogo `InstagramReel`, preservando seus IDs e vínculos legados. Sincronizações não excluem vídeos ou associações. A ativação do motor ainda não está disponível.
+Tags têm ID estável e pertencem ao workspace. As etapas de tag referenciam `Tag.id`, nunca seu nome. `AutomationReel` associa o rascunho ao catálogo `InstagramReel`, preservando seus IDs e vínculos legados. Sincronizações não excluem vídeos ou associações. A ativação exige prontidão de execução e continua bloqueada na instalação local, cuja configuração e dados foram preservados.
 
 ## Testes e verificações
 
@@ -191,6 +193,10 @@ npm test
 npm run typecheck
 npm run lint
 npm run build
+npm run worker:build
+npm run test:execution
+node tests/docker/execution.mjs --e2e
+npm run test:worker
 ```
 
 Os testes unitários cobrem validação de tags, normalização, limites, entradas extras, dados de login e hashing/verificação de senha. A política de senhas cobre os limites de 6/14 caracteres, ausência de cada requisito, confirmação idêntica, mensagens seguras e entrada mascarada. Integração verifica criação/redefinição apenas no banco de testes, preservação da conta em erros e revogação de sessões. No navegador, uma senha antiga maior que 14 caracteres entra normalmente; depois de uma redefinição de teste, a sessão e a senha antigas deixam de dar acesso, e a senha nova funciona.
@@ -261,7 +267,7 @@ compose.yaml                PostgreSQL para desenvolvimento
 
 ## Próximas etapas
 
-As capacidades verificadas na documentação oficial e as pendências práticas estão em [docs/INSTAGRAM-MENSAGENS.md](docs/INSTAGRAM-MENSAGENS.md). O endpoint autenticado `POST /api/automacoes/:id/ativar` revisa o rascunho: retorna 400 para configurações incompletas/incompatíveis e 409 para fluxos completos enquanto a integração não estiver implementada. Ele mantém o status `DRAFT` e não envia mensagens.
+As regras do editor estão em [INSTAGRAM-MENSAGENS.md](docs/INSTAGRAM-MENSAGENS.md); execução, segurança e pendências reais em [INSTAGRAM-MVP.md](docs/INSTAGRAM-MVP.md). `POST /api/automacoes/:id/ativar` retorna 400 para rascunhos incompatíveis e 409 sem configuração, schema ou worker prontos. Só altera para `ACTIVE` após esses gates; o endpoint não envia diretamente. A página **Atividades** distingue aceite, rejeição e resultado incerto, sem afirmar entrega por inferência.
 
 Para testar no navegador: abra Automações → Nova automação, adicione uma DM e escreva seu conteúdo. Use **Adicionar botão** dentro da mensagem e escolha uma ação. A prévia acompanha a edição; **Testar rascunho** libera um comentário fictício e a revisão das pendências. **Salvar rascunho** funciona mesmo antes de concluir os campos. Reabra pela listagem para continuar a edição.
 
@@ -269,10 +275,10 @@ Na **Etapa 3 — Configure as respostas públicas**, preencha as variações des
 
 A migration `202610091700_public_reply_config` adiciona `Automation.publicReplies` e copia os antigos blocos públicos, preservando texto, ordem e campos vazios. Não exclui nem modifica os registros antigos. Eles deixam de aparecer na conversa privada e são consolidados na configuração própria ao salvar o rascunho. Clientes antigos que omitem a nova configuração mantêm as respostas existentes. Faça backup e use `npm run db:migrate` ao atualizar outra instalação; não resete o banco.
 
-A conexão de leitura, a sincronização paginada e a seleção de Reels específicos estão disponíveis. Etapas futuras poderão definir OAuth no Pulso, renovação dos tokens, webhooks, processamento, limites oficiais de envio, ativação, filas e recuperação de falhas. Essas funcionalidades dependem de novo escopo e não foram implementadas nesta entrega.
+A conexão de leitura, a sincronização paginada e a seleção de Reels específicos estão disponíveis. O fluxo de execução foi testado com API simulada e banco descartável; ainda depende do callback HTTPS, permissões/inscrição e ensaio real expressamente autorizado. A migration aditiva `202610141500_instagram_execution` foi aplicada somente nos testes. Não a aplicar ao banco existente sem backup e autorização.
 
 **Regra a preservar:** automações específicas de um Reel têm prioridade sobre automações globais.
 
-O OAuth da Meta, tokens, permissões, webhooks, processamento, limites oficiais de envio e recuperação de falhas exigirão suas próprias definições e validações. Não são habilitados automaticamente por esta entrega.
+OAuth e renovação automática de tokens continuam pendentes. O provider já suporta substituição privada da credencial; token expirado suspende processamento sem apagar filas. Publicação do Pulso, transferência de dados e envios reais não são habilitados automaticamente por esta entrega.
 
 Referências oficiais: [Next.js](https://nextjs.org/docs), [Auth.js / NextAuth Credentials](https://next-auth.js.org/providers/credentials), [Prisma PostgreSQL](https://www.prisma.io/docs/orm/v7/core-concepts/supported-databases/postgresql).

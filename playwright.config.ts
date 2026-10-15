@@ -7,7 +7,7 @@ export default defineConfig({
   use: { baseURL: "http://localhost:3100", trace: "retain-on-failure" },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: {
-    command: "node node_modules/next/dist/bin/next start -p 3100",
+    command: "node node_modules/next/dist/bin/next start --hostname 127.0.0.1 -p 3100",
     url: "http://localhost:3100/login",
     reuseExistingServer: false,
     timeout: 60000,

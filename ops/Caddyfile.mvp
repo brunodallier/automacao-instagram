@@ -1,0 +1,40 @@
+{$PULSO_DOMAIN} {
+  encode zstd gzip
+  header Strict-Transport-Security "max-age=15552000"
+  log {
+    output stdout
+    format filter {
+      wrap json
+      fields {
+        request>headers delete
+        request>uri delete
+        resp_headers delete
+      }
+    }
+  }
+  route {
+    # Não há webhook real implementado. Nenhuma exceção pública é habilitada.
+    @blocked path /api/health /api/health/* /api/webhooks /api/webhooks/* /webhooks /webhooks/*
+    respond @blocked 404
+    # Credencial independente do login do Pulso; somente o hash chega ao Caddy.
+    basic_auth argon2id "Pulso privado" {
+      import /run/secrets/panel_users
+    }
+    reverse_proxy web:3000 {
+      header_up -Authorization
+      header_up -Cf-Access-Jwt-Assertion
+      header_up -Cf-Access-Authenticated-User-Email
+    }
+  }
+}
+
+# Requisições com outros hosts não alcançam o painel, mesmo com SNI válido.
+http:// {
+  respond 404
+}
+https:// {
+  respond 404
+}
+
+# Vazio no MVP privado. O overlay de webhook só será usado após autorização.
+import /etc/caddy/meta-webhooks.d/*

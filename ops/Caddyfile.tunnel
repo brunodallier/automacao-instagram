@@ -1,0 +1,29 @@
+# Proxy interno para Tunnel; configuração pública, sem credenciais.
+{
+  auto_https off
+}
+:8080 {
+  respond 404
+}
+http://{$PULSO_DOMAIN}:8080 {
+  encode zstd gzip
+  log {
+    output stdout
+    format filter {
+      wrap json
+      fields {
+        request>headers delete
+        request>uri delete
+        resp_headers delete
+      }
+    }
+  }
+  @internal path /api/health/* /api/webhooks /api/webhooks/* /webhooks /webhooks/*
+  respond @internal 404
+  reverse_proxy web:3000 {
+    # Origem somente na rede Docker: a conexão pública usa HTTPS no Cloudflare.
+    header_up X-Forwarded-Proto https
+    header_up -Cf-Access-Jwt-Assertion
+    header_up -Cf-Access-Authenticated-User-Email
+  }
+}

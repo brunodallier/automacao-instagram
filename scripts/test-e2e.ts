@@ -22,6 +22,17 @@ try {
         E2E_PASSWORD: randomBytes(24).toString("base64url"),
         // Tests must never contact Meta with the installation's real credential.
         INSTAGRAM_ACCESS_TOKEN: "",
+        INSTAGRAM_ACCESS_TOKEN_FILE: "",
+        INSTAGRAM_SEND_MODE: "disabled",
+        INSTAGRAM_META_VALIDATED: "false",
+        INSTAGRAM_WEBHOOK_ENABLED: "false",
+        INSTAGRAM_APP_SECRET: "",
+        INSTAGRAM_APP_SECRET_FILE: "",
+        INSTAGRAM_WEBHOOK_VERIFY_TOKEN: "",
+        INSTAGRAM_WEBHOOK_VERIFY_TOKEN_FILE: "",
+        INSTAGRAM_EXECUTION_ACCOUNT_ID: "",
+        INSTAGRAM_TEST_COMMENT_ID: "",
+        INSTAGRAM_TEST_RECIPIENT_ID: "",
       },
     },
   );
