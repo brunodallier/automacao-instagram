@@ -30,7 +30,7 @@ A resposta pública alternativa nunca é disparada por atraso, aceite, timeout o
 
 ## Configuração privada e bloqueios
 
-O `.env` local foi preservado e recebeu campos adicionais sem substituir credenciais existentes. `INSTAGRAM_APP_SECRET` ainda está vazio. Inserir o **App Secret do mesmo aplicativo Meta** diretamente no arquivo local; não enviar no chat. `INSTAGRAM_WEBHOOK_VERIFY_TOKEN` já foi gerado privadamente. A migração nova **não** foi aplicada ao banco local nesta entrega.
+O `.env` local foi preservado. O proprietário configurou `INSTAGRAM_APP_SECRET` manualmente; em 15/10/2026 foi validado o formato esperado e o HMAC em memória, sem imprimir, transmitir ou persistir o segredo/assinatura. Isso não comprova ainda que corresponde ao aplicativo: será confirmado por evento real assinado da Meta. `INSTAGRAM_WEBHOOK_VERIFY_TOKEN` já foi gerado privadamente. A migração nova **não** foi aplicada ao banco local. [Preparação do primeiro teste somente de recepção](INSTAGRAM-WEBHOOK-TESTE.md).
 
 | Configuração | Comportamento |
 | --- | --- |
@@ -108,11 +108,11 @@ O teste de worker utiliza o binário que vai à imagem, Next.js, PostgreSQL e Gr
 | Falhas de backup | Configuração ausente/senha errada recusadas sem corromper o repositório |
 | Dependências de produção | `npm audit --omit=dev`: zero vulnerabilidades |
 
-A auditoria completa mantém os alertas conhecidos da cadeia de lint de desenvolvimento, descritos no README; nenhuma correção forçada ou downgrade foi aplicado. As suites removem somente recursos próprios; as verificações dos demais contêineres passaram. Banco local novamente comparado por SHA256, sem alterações. Os envios continuam `disabled`, webhooks desabilitados e App Secret vazio. DNS, VPS, dados reais e inscrições da Meta não foram modificados por esses testes.
+A auditoria completa mantém os alertas conhecidos da cadeia de lint de desenvolvimento, descritos no README; nenhuma correção forçada ou downgrade foi aplicado. As suites removem somente recursos próprios; as verificações dos demais contêineres passaram. Banco local novamente comparado por SHA256, sem alterações. Os envios continuam `disabled` e webhooks desabilitados. O App Secret foi configurado posteriormente pelo proprietário e validado localmente. DNS, VPS, dados reais e inscrições da Meta não foram modificados por esses testes.
 
 ## Ensaio real proposto — depende de autorização
 
-1. Proprietário preenche App Secret **somente no arquivo privado**. Conferir as permissões/modalidade e a possibilidade de receber eventos no aplicativo atual.
+1. App Secret preenchido pelo proprietário **somente no arquivo privado**, formato e HMAC local validados. Conferir permissões/modalidade e demonstrar um evento real para confirmar correspondência ao aplicativo.
 2. Autorizar publicação somente do callback HTTPS separado; autorizar/aplicar a migração aditiva no ambiente de teste escolhido e inscrição da conta. Com envios bloqueados, demonstrar desafio e recebimento assinado de um comentário em Reel próprio. Não publicar o painel ou migrar seus dados por consequência dessa autorização.
 3. Usar uma conta de teste distinta como destinatário, com papéis/acessos exigidos pela Meta. Confirmar Reel, comentário, IGSID, palavra-chave, textos exatos e intervalo do teste. Manter automações de produção em rascunho; criar somente uma automação controlada e limitar os IDs no ambiente privado.
 4. **Solicitar autorização expressa antes do primeiro envio real**, apresentando exatamente uma DM inicial e uma resposta pública. Somente após essa aprovação ativar `controlled`; concluir envio, aceitação e observação no Instagram, distinguindo Solicitações, visualização e entrega. Bloquear envios novamente após o ensaio.
@@ -121,7 +121,7 @@ A auditoria completa mantém os alertas conhecidos da cadeia de lint de desenvol
 
 ## Pendências para lançamento
 
-- App Secret privado, callback HTTPS autorizado, inscrição e acesso/revisão efetivos da Meta; ensaio real de private reply, resposta pública e template/postback.
+- Callback HTTPS autorizado, inscrição e acesso/revisão efetivos da Meta; comprovação do App Secret por evento real e ensaio real de private reply, resposta pública e template/postback.
 - Autorizações separadas para A do Pulso no Registro.br, publicação protegida e migração dos dados. Nameservers, DNSSEC e Vercel ficam preservados.
 - Destino externo de backup, credenciais restritas, envio/check e restauração antes da produção; monitoramento/alertas operacionais.
 - Estratégia operacional de validade/renovação do token. Provider está separado e erros são tratados; renovação automática ainda não implementada.

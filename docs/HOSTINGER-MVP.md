@@ -35,6 +35,8 @@ Usar `compose.production.yaml` junto de `compose.mvp.yaml`; **não combinar** co
 
 `compose.webhooks.yaml` prepara um hostname HTTPS separado, com apenas GET/POST `/api/webhooks/instagram` e validação de desafio/HMAC. Não está ativado e não possui DNS publicado. Sua publicação depende de autorização específica; não cria bypass no painel.
 
+Para o **primeiro teste somente de recepção**, antes da migração/publicação do painel, foi preparado [um receptor de homologação independente](INSTAGRAM-WEBHOOK-TESTE.md). Usa `compose.production.yaml` com `compose.webhook-reception.yaml`, sem os outros overlays, sem dados locais, proprietário, token Instagram ou worker. Não iniciar nem criar seu DNS sem autorização. Não promover seu banco técnico automaticamente a produção.
+
 A senha adicional usa o diálogo do navegador; não é OTP por e-mail nem MFA. O login interno continua com seu rate limit. Caddy padrão não adiciona rate limit nesta configuração; a senha aleatória deve permanecer privada e ser rotacionada em caso de exposição. A memória do Caddy no overlay é 256 MB; os demais limites da KVM 2 permanecem.
 
 Gerar credencial sem segredo nos argumentos ou stdout:

@@ -106,6 +106,8 @@ A credencial é enviada somente pelo servidor no cabeçalho `Authorization`, sem
 
 Para execução, consulte [INSTAGRAM-MVP.md](docs/INSTAGRAM-MVP.md). `INSTAGRAM_SEND_MODE=disabled` e `INSTAGRAM_WEBHOOK_ENABLED=false` são os padrões seguros. App Secret e verify token ficam exclusivamente no ambiente privado. O comando `npm run instagram:webhooks:check` apenas consulta a inscrição; não configura nem envia mensagens. Nenhuma flag é habilitada como consequência de verificar o perfil.
 
+O primeiro ensaio externo foi preparado [somente para recepção de webhooks](docs/INSTAGRAM-WEBHOOK-TESTE.md), sem publicar o painel ou transferir dados. Usa outro projeto Compose, banco vazio, nenhuma conta de proprietário, nenhum token Instagram e nenhum worker. O overlay impõe envios bloqueados e não dá saída de rede ao web. DNS, HTTPS público e configuração na Meta ainda dependem de autorização; o teste local é `npm run test:webhook-reception`.
+
 ### Reels reais
 
 Abra **Meus Reels** e clique em **Sincronizar Reels** para consultar todas as páginas de publicações disponíveis pela Meta. O catálogo armazena somente Reels identificados, vinculados à conta e ao workspace. Na Etapa 1 do editor, **Reels específicos** permite pesquisar e selecionar um ou vários vídeos; a seleção é preservada ao salvar/reabrir rascunhos. A mesma sincronização está disponível no editor, sem apagar alterações em andamento. A instalação local sincronizou 87 Reels reais em quatro páginas. [Campos, limitações e recuperação](docs/REELS.md).
@@ -197,6 +199,7 @@ npm run worker:build
 npm run test:execution
 node tests/docker/execution.mjs --e2e
 npm run test:worker
+npm run test:webhook-reception
 ```
 
 Os testes unitários cobrem validação de tags, normalização, limites, entradas extras, dados de login e hashing/verificação de senha. A política de senhas cobre os limites de 6/14 caracteres, ausência de cada requisito, confirmação idêntica, mensagens seguras e entrada mascarada. Integração verifica criação/redefinição apenas no banco de testes, preservação da conta em erros e revogação de sessões. No navegador, uma senha antiga maior que 14 caracteres entra normalmente; depois de uma redefinição de teste, a sessão e a senha antigas deixam de dar acesso, e a senha nova funciona.

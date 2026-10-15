@@ -23,6 +23,7 @@ Thumbs.db
 deploy/secrets/
 deploy/backups/
 deploy/production.env
+deploy/webhook-reception.env
 deploy/cloudflare/
 *.dump
 *.sql.gz

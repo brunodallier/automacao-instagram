@@ -1,0 +1,9 @@
+# Somente o callback da Meta. Painel, login, assets e outros hosts não são publicados.
+import /etc/caddy/meta-webhooks.d/*
+
+http:// {
+  respond 404
+}
+https:// {
+  respond 404
+}

@@ -19,6 +19,7 @@
     "worker:build": "node scripts/build-worker.mjs",
     "test:execution": "node tests/docker/execution.mjs",
     "test:worker": "node tests/docker/worker-flow.mjs",
+    "test:webhook-reception": "node tests/docker/webhook-reception.mjs",
     "instagram:webhooks:check": "tsx scripts/instagram-webhooks.ts",
     "test:e2e": "tsx scripts/test-e2e.ts",
     "db:generate": "prisma generate",

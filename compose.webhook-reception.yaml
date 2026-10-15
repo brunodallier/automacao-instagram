@@ -1,0 +1,45 @@
+# Somente recepção em homologação. Usar com compose.production.yaml, SEM outros overlays.
+# Não iniciar na VPS nem alterar DNS antes de autorização específica.
+services:
+  web:
+    environment:
+      INSTAGRAM_SEND_MODE: disabled
+      INSTAGRAM_META_VALIDATED: "false"
+      INSTAGRAM_WEBHOOK_ENABLED: "true"
+      INSTAGRAM_ACCESS_TOKEN_FILE: ""
+      INSTAGRAM_TEST_COMMENT_ID: ""
+      INSTAGRAM_TEST_RECIPIENT_ID: ""
+    secrets: !override [database_url, nextauth_secret, instagram_app_secret, instagram_webhook_verify_token]
+    networks: !override [application, receiver_proxy]
+  worker:
+    profiles: !override [execution-not-authorized]
+    environment:
+      INSTAGRAM_SEND_MODE: disabled
+      INSTAGRAM_META_VALIDATED: "false"
+      INSTAGRAM_ACCESS_TOKEN_FILE: ""
+    secrets: !override [database_url]
+    networks: !override [application]
+  tools:
+    environment:
+      INSTAGRAM_EXECUTION_ACCOUNT_ID: ${INSTAGRAM_EXECUTION_ACCOUNT_ID:?Configure a conta real autorizada}
+      INSTAGRAM_SEND_MODE: disabled
+      PULSO_WEBHOOK_RECEPTION_ONLY: "true"
+  caddy:
+    environment:
+      PULSO_WEBHOOK_DOMAIN: ${PULSO_WEBHOOK_DOMAIN:?Configure o hostname separado após autorização}
+    volumes: !override
+      - ./ops/Caddyfile.webhook-reception:/etc/caddy/Caddyfile:ro
+      - ./ops/Caddyfile.meta-webhooks:/etc/caddy/meta-webhooks.d/instagram.caddy:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: !override [receiver_proxy, edge]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    pids_limit: 128
+networks:
+  application:
+    internal: true
+  receiver_proxy:
+    internal: true
+  edge:

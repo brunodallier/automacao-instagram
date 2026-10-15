@@ -25,6 +25,7 @@ src/generated
 deploy/secrets
 deploy/backups
 deploy/production.env
+deploy/webhook-reception.env
 deploy/cloudflare
 **/*.private
 **/*.private.json
