@@ -221,7 +221,7 @@ describe("webhooks oficiais", () => {
       return handlers.POST(new Request("https://fixture.invalid", { method: "POST", headers, body }));
     };
     expect((await send(undefined, raw, true)).status).toBe(401);
-    expect(sink.mock.calls.at(-1)?.[0]).toEqual({ signature256Present: false, signature256FormatValid: false, legacySignaturePresent: true, rawBodyRead: false, result: "MISSING_SIGNATURE" });
+    expect(sink.mock.calls.at(-1)?.[0]).toEqual({ signature256Present: false, signature256FormatValid: false, legacySignaturePresent: true, rawBodyRead: false, candidateHmacMatches: null, result: "MISSING_SIGNATURE" });
     expect((await send("")).status).toBe(401);
     expect(sink.mock.calls.at(-1)?.[0]).toMatchObject({ signature256Present: true, signature256FormatValid: false, result: "INVALID_SIGNATURE_FORMAT" });
     expect((await send("sha256=malformed-private")).status).toBe(401);
@@ -229,7 +229,7 @@ describe("webhooks oficiais", () => {
     expect((await send("sha256=" + "0".repeat(64))).status).toBe(401);
     expect(sink.mock.calls.at(-1)?.[0]).toMatchObject({ signature256FormatValid: true, rawBodyRead: true, result: "HMAC_MISMATCH" });
     expect((await send(signature)).status).toBe(200);
-    expect(sink.mock.calls.at(-1)?.[0]).toEqual({ signature256Present: true, signature256FormatValid: true, legacySignaturePresent: false, rawBodyRead: true, result: "VALID_SIGNATURE" });
+    expect(sink.mock.calls.at(-1)?.[0]).toEqual({ signature256Present: true, signature256FormatValid: true, legacySignaturePresent: false, rawBodyRead: true, candidateHmacMatches: null, result: "VALID_SIGNATURE" });
     expect((await send(signature, raw + " ")).status).toBe(401);
     const reserialized = "sha256=" + createHmac("sha256", secret).update(JSON.stringify(JSON.parse(raw))).digest("hex");
     expect((await send(reserialized)).status).toBe(401);
@@ -241,6 +241,28 @@ describe("webhooks oficiais", () => {
   it("falha no diagnóstico não relaxa autenticação nem produz confirmação falsa", async () => {
     const handlers = webhookHandlers({} as PrismaClient, config, () => now, () => { throw Error("fixture-private-error"); });
     expect((await handlers.POST(new Request("https://fixture.invalid", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }))).status).toBe(401);
+  });
+  it("compara candidato sem autorizar eventos, persistir valores ou alterar a chave ativa", async () => {
+    const candidate = "abcdef0123456789abcdef0123456789";
+    const sink = vi.fn();
+    const findMany = vi.fn(async () => []);
+    const handlers = webhookHandlers({ socialAccount: { findMany } } as unknown as PrismaClient, config, () => now, sink, candidate);
+    const body = '{\r\n "object": "instagram", "entry": [], "fixture":"ação 🌊"\r\n}';
+    const send = (key: string, modified = false) => handlers.POST(new Request("https://fixture.invalid", {
+      method: "POST", body: body + (modified ? " " : ""),
+      headers: { "content-type": "application/json", "x-hub-signature-256": "sha256=" + createHmac("sha256", key).update(body).digest("hex") },
+    }));
+    expect((await send(candidate)).status).toBe(401);
+    expect(sink.mock.calls.at(-1)?.[0]).toMatchObject({ result: "HMAC_MISMATCH", candidateHmacMatches: true });
+    expect(findMany).not.toHaveBeenCalled();
+    expect((await send(candidate, true)).status).toBe(401);
+    expect(sink.mock.calls.at(-1)?.[0]).toMatchObject({ candidateHmacMatches: false });
+    expect((await send(secret)).status).toBe(200);
+    expect(sink.mock.calls.at(-1)?.[0]).toMatchObject({ result: "VALID_SIGNATURE", candidateHmacMatches: false });
+    expect(findMany).toHaveBeenCalledTimes(1);
+    for (const privateValue of [candidate, secret, body, "ação 🌊"])
+      expect(JSON.stringify(sink.mock.calls)).not.toContain(privateValue);
+    expect(config.appSecret).toBe(secret);
   });
 });
 describe("resultado real da API e travas de envio", () => {

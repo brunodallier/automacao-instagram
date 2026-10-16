@@ -190,6 +190,7 @@ export function webhookHandlers(
   settings: ExecutionSettings,
   now: () => Date = () => new Date(),
   diagnose?: (entry: WebhookSignatureDiagnostic) => void,
+  diagnosticCandidate?: string,
 ) {
   const configured = () =>
     settings.webhookEnabled &&
@@ -234,6 +235,7 @@ export function webhookHandlers(
       const report = (
         result: WebhookSignatureDiagnostic["result"],
         rawBodyRead: boolean,
+        candidateHmacMatches: boolean | null = null,
       ) => {
         // An explicit allowlist: never pass headers, body, signature, hash or secret to the sink.
         try {
@@ -242,6 +244,7 @@ export function webhookHandlers(
             signature256FormatValid: signatureFormatValid,
             legacySignaturePresent: request.headers.has("x-hub-signature"),
             rawBodyRead,
+            candidateHmacMatches,
             result,
           });
         } catch {
@@ -257,6 +260,10 @@ export function webhookHandlers(
       }
       try {
         const raw = await boundedWebhookBody(request);
+        // Shadow comparison only: this candidate can never authorize ingestion.
+        const candidateHmacMatches = diagnose && typeof diagnosticCandidate === "string" && /^[a-fA-F0-9]{32}$/.test(diagnosticCandidate)
+          ? validWebhookSignature(raw, signature, diagnosticCandidate)
+          : null;
         if (
           !validWebhookSignature(
             raw,
@@ -264,10 +271,10 @@ export function webhookHandlers(
             settings.appSecret,
           )
         ) {
-          report("HMAC_MISMATCH", true);
+          report("HMAC_MISMATCH", true, candidateHmacMatches);
           return response(401);
         }
-        report("VALID_SIGNATURE", true);
+        report("VALID_SIGNATURE", true, candidateHmacMatches);
         let events: NormalizedEvent[];
         try {
           events = normalizeWebhook(JSON.parse(raw.toString("utf8")), now());
@@ -298,6 +305,7 @@ export type WebhookSignatureDiagnostic = {
   signature256FormatValid: boolean;
   legacySignaturePresent: boolean;
   rawBodyRead: boolean;
+  candidateHmacMatches: boolean | null;
   result:
     | "MISSING_SIGNATURE"
     | "INVALID_SIGNATURE_FORMAT"

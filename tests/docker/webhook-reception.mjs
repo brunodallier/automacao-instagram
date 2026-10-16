@@ -16,7 +16,8 @@ const password = randomBytes(32).toString("hex"),
   session = randomBytes(32).toString("hex");
 const appSecret = randomBytes(16).toString("hex"),
   verify = randomBytes(32).toString("hex");
-const privateValues = [password, session, appSecret, verify];
+const candidate = randomBytes(16).toString("hex");
+const privateValues = [password, session, appSecret, verify, candidate];
 const redact = (text) =>
   privateValues.reduce(
     (value, secret) => value.replaceAll(secret, "[fixture-redacted]"),
@@ -83,7 +84,11 @@ for (const [name, value] of Object.entries({
   writeFileSync(file, value, { mode: 0o444 });
   secrets[name] = { file };
 }
-writeFileSync(override, JSON.stringify({ secrets }));
+const candidateFile = join(directory, "diagnostic-candidate");
+writeFileSync(candidateFile, candidate, { mode: 0o444 });
+writeFileSync(override, JSON.stringify({ secrets, services: { web: { volumes: [
+  { type: "bind", source: candidateFile, target: "/run/secrets/instagram_diagnostic_candidate", read_only: true },
+] } } }));
 const base = [
   "compose",
   "--project-directory",
@@ -297,6 +302,9 @@ try {
   const originalBytes = '{\r\n "object": "instagram", "entry": [], "fixture": "ação 🌊" \r\n}\n';
   const originalSignature = "sha256=" + createHmac("sha256", appSecret).update(originalBytes).digest("hex");
   const changedSerializationSignature = "sha256=" + createHmac("sha256", appSecret).update(JSON.stringify(JSON.parse(originalBytes))).digest("hex");
+  const candidateSignature = "sha256=" + createHmac("sha256", candidate).update(originalBytes).digest("hex");
+  // Even a candidate match cannot authorize ingestion or return 200.
+  assert.equal((await probe("/api/webhooks/instagram", { method: "POST", body: originalBytes, signature: candidateSignature })).status, 401);
   assert.equal((await probe("/api/webhooks/instagram", { method: "POST", body: originalBytes, signature: originalSignature })).status, 200);
   assert.equal((await probe("/api/webhooks/instagram", { method: "POST", body: originalBytes, signature: changedSerializationSignature })).status, 401);
   assert.equal(
@@ -393,15 +401,17 @@ try {
     "1",
   );
   const logs = await compose("logs", "--no-color");
-  for (const value of [...privateValues, signature, originalSignature, changedSerializationSignature, "sha1=fixture-must-stay-private", "sha256=fixture-invalid-format", "ação 🌊"])
+  for (const value of [...privateValues, signature, originalSignature, changedSerializationSignature, candidateSignature, "sha1=fixture-must-stay-private", "sha256=fixture-invalid-format", "ação 🌊"])
     assert.equal(logs.includes(value), false, "Credencial de fixture nos logs");
   const diagnostics = logs.split(/\r?\n/).filter((line) => line.includes('"event":"PULSO_WEBHOOK_SIGNATURE_DIAGNOSTIC"'))
     .map((line) => JSON.parse(line.slice(line.indexOf('{"event":'))));
   for (const outcome of ["MISSING_SIGNATURE", "INVALID_SIGNATURE_FORMAT", "HMAC_MISMATCH", "VALID_SIGNATURE"])
     assert.ok(diagnostics.some((record) => record.result === outcome), `Diagnóstico ausente: ${outcome}`);
   assert.ok(diagnostics.some((record) => record.legacySignaturePresent && !record.signature256Present));
+  assert.ok(diagnostics.some((record) => record.result === "HMAC_MISMATCH" && record.candidateHmacMatches === true));
+  assert.ok(diagnostics.some((record) => record.result === "VALID_SIGNATURE" && record.candidateHmacMatches === false));
   for (const record of diagnostics)
-    assert.deepEqual(Object.keys(record).sort(), ["event", "at", "signature256Present", "signature256FormatValid", "legacySignaturePresent", "rawBodyRead", "result"].sort());
+    assert.deepEqual(Object.keys(record).sort(), ["event", "at", "signature256Present", "signature256FormatValid", "legacySignaturePresent", "rawBodyRead", "candidateHmacMatches", "result"].sort());
   console.log(
     "Recepção isolada passou: HTTPS verificado, desafio/HMAC, adulteração rejeitada, evento/fila duráveis sem duplicatas, painel/IP/portas bloqueados, sem worker, token ou saída de rede do web.",
   );

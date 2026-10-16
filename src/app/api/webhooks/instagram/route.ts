@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { webhookDiagnosticCandidate } from "@/lib/instagram/execution/diagnostic";
 import {
   executionSettings,
   webhookDiagnosticsEnabled,
@@ -13,7 +14,8 @@ export async function GET(request: Request) {
   return webhookHandlers(db, executionSettings()).GET(request);
 }
 export async function POST(request: Request) {
-  const diagnose = webhookDiagnosticsEnabled()
+  const diagnosticsEnabled = webhookDiagnosticsEnabled();
+  const diagnose = diagnosticsEnabled
       ? (entry: WebhookSignatureDiagnostic) => {
           console.info(JSON.stringify({
             event: "PULSO_WEBHOOK_SIGNATURE_DIAGNOSTIC",
@@ -22,5 +24,6 @@ export async function POST(request: Request) {
           }));
         }
       : undefined;
-  return webhookHandlers(db, executionSettings(), undefined, diagnose).POST(request);
+  const candidate = await webhookDiagnosticCandidate(diagnosticsEnabled);
+  return webhookHandlers(db, executionSettings(), undefined, diagnose, candidate).POST(request);
 }

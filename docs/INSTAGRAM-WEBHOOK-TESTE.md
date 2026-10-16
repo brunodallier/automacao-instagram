@@ -66,6 +66,18 @@ Uma leitura adicional de `/{app-id}/subscriptions` retornou HTTP 200 com lista v
 
 Referência do formato de autenticação em memória: [SDK oficial arquivado da Meta, FacebookApp::getAccessToken](https://github.com/facebookarchive/php-graph-sdk/blob/5.x/src/Facebook/FacebookApp.php). O resultado atual da associação decorre das respostas reais da API e do controle negativo, não da idade desse SDK.
 
+### Diagnóstico com candidato do produto Instagram Login
+
+O proprietário identificou o Instagram App ID do produto, diferente do App ID geral, e salvou seu segredo existente em arquivo privado fora do repositório. O candidato tem formato esperado e difere da configuração ativa. A consulta desse par ao Graph do Facebook retornou erro de autenticação; isso não confirma a associação nem prova que o candidato do produto Instagram esteja incorreto. Não emitir/renovar tokens ou redefinir segredos para contornar esse resultado.
+
+Foi preparada uma comparação temporária sobre os mesmos bytes originais de cada POST. O arquivo opcional `/run/secrets/instagram_diagnostic_candidate`, montado somente para leitura, é lido apenas durante o diagnóstico habilitado com prazo finito. Não substitui `INSTAGRAM_APP_SECRET`, não é utilizado para aceitar eventos e não fica embutido na imagem. Ausência, erro de leitura, formato inválido ou expiração deixam a autenticação normal intacta.
+
+O registro sanitizado acrescenta somente `candidateHmacMatches`: `true` ou `false` quando houve comparação, `null` quando ela não foi realizada. Mesmo se esse campo for `true`, a assinatura divergente da chave ativa continua retornando HTTP 401 antes de qualquer persistência. Nenhum corpo, cabeçalho, assinatura, segredo ou derivação é exportado. O candidato não deve ser registrado em `.env`, Git, comandos, relatórios ou logs.
+
+Os testes devem comprovar que candidato correto não autoriza ingestão, chave ativa correta continua funcionando, corpo adulterado é rejeitado, observabilidade não vaza valores e o arquivo deixa de ser lido com o diagnóstico desligado/expirado. A comparação de um novo POST da Meta ainda é necessária para concluir a causa e solicitar autorização antes de eventual substituição da credencial ativa. Esta preparação não confirma correção do candidato nem sucesso da Meta.
+
+Validação da comparação: 126 testes unitários, oito de runtime, TypeScript e lint passaram. A suite Docker construiu a imagem de produção e confirmou HTTPS, isolamento, HMAC, candidato sem poder de autenticação, persistência/deduplicação somente com a chave ativa e ausência de valores privados nos logs. Seus volumes descartáveis foram removidos e os demais contêineres preservados. O coletor de diagnóstico também passou pelos testes de lista explícita de campos e descarte de valores inesperados. Nada dessa suite utilizou credenciais ou dados reais.
+
 ### Configuração na Meta e próxima etapa
 
 No aplicativo correto, em Instagram → API setup with Instagram login → Webhooks, configurar:
