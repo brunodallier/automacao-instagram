@@ -1,6 +1,6 @@
 # Primeiro teste controlado: somente receber eventos
 
-Receptor de homologação publicado com autorização em 15/10/2026. **Somente o callback HTTPS está disponível; painel e envios reais permanecem bloqueados.** Nenhum dado local foi migrado. O desafio da Meta foi confirmado pelo proprietário; a divergência do segredo HMAC foi corrigida com autorização no ambiente local e na VPS. O teste posterior `comments` v26.0 da própria Meta chegou com HMAC válido e HTTP 200 em duas entregas. A homologação permaneceu com zero eventos e tarefas; a persistência de evento da conta real e sua inscrição continuam pendentes. O teste de envio continua exigindo autorização própria com destinatário e textos definidos.
+Receptor de homologação publicado com autorização em 15/10/2026. **Somente o callback HTTPS está disponível; painel e envios reais permanecem bloqueados.** Nenhum dado local foi migrado. O desafio da Meta foi confirmado pelo proprietário; a divergência do segredo HMAC foi corrigida com autorização no ambiente local e na VPS. O teste posterior `comments` v26.0 da própria Meta chegou com HMAC válido e HTTP 200 em duas entregas. Com autorização posterior, a conta fixada foi inscrita nos quatro eventos previstos; a API confirmou `SUBSCRIBED`. A homologação permaneceu com zero eventos e tarefas; a persistência de evento da conta real continua pendente. O teste de envio continua exigindo autorização própria com destinatário e textos definidos.
 
 ## Estado verificado na VPS — 15/10/2026
 
@@ -136,6 +136,18 @@ Ambas tinham SHA256 presente e no formato esperado, com validação sobre o corp
 **Não houve evento registrado no banco de homologação:** eventos, tarefas, saídas e atividades continuaram zero. O HTTP 200 comprova autenticação, envelope válido e conclusão do processamento de ingestão; não comprova criação de registro. O código persiste apenas eventos normalizados elegíveis vinculados unicamente à conta fixada e ao workspace. Eventos de exemplo que não atendam a esses critérios são ignorados com 200. Como o diagnóstico não captura payloads ou identificadores de requisições, não é possível afirmar qual filtro ignorou esse exemplo somente a partir dos registros disponíveis. Não relaxar os vínculos nem inserir dados artificiais para produzir uma contagem positiva.
 
 A consulta segura `npm run instagram:webhooks:check`, após esse teste, retornou novamente `NOT_SUBSCRIBED`, com `apps=[]` e `readOnly=true`. Não houve POST de inscrição. Essa pendência da conta é distinta do sucesso do teste de exemplo; ainda é necessário preparar/aprovar a inscrição para recepção e depois comprovar um comentário real elegível, com HMAC válido e evento/tarefa persistidos, mantendo o worker parado. Não publicar o aplicativo nem habilitar envios para contornar requisitos de permissões, papéis ou modo da Meta.
+
+#### Inscrição autorizada e encerramento da sessão
+
+Posteriormente, o proprietário autorizou exclusivamente a inscrição da conta fixada em `comments`, `messages`, `messaging_postbacks`, `messaging_seen`. A identidade e o estado anterior vazio foram conferidos antes da operação. Foi executado um único POST com o token existente no cabeçalho; a API respondeu sucesso. Leituras independentes posteriores retornaram `SUBSCRIBED` e os quatro campos. Não foi alterada a flag persistente de aprovação no `.env`, não houve emissão de token, publicação do aplicativo, novo deploy, comentário real ou envio.
+
+A API retornou um identificador de aplicativo diferente dos identificadores previamente anotados do painel, sem fornecer nome/mapeamento. A comparação direta desses identificadores não foi tomada como equivalência. A confirmação atual é da inscrição retornada pela API para o token e a conta fixada; conferir a correspondência no painel Meta antes do lançamento. Os snapshots anteriores/posteriores e as limitações da auditoria foram guardados privadamente, fora do Git.
+
+O estado anterior era vazio. Qualquer reversão deve remover apenas a inscrição criada, após nova autorização e nova leitura, preservando mudanças posteriores de terceiros. Não revogar o token, redefinir segredos ou excluir dados para reverter a inscrição. Nenhuma reversão foi executada.
+
+Foi acrescentado um teste de integração em PostgreSQL descartável: exemplos assinados de outra conta ou sem timestamp retornam 200 sem inserir registros; um comentário válido da conta fixada persiste evento e tarefa mesmo com status `NOT_CONNECTED`, modo disabled e sem executar envios. Isso distingue caminhos possíveis do exemplo ignorado, mas não identifica retrospectivamente seu filtro exato, pois os payloads reais não foram capturados. Não foram inseridos dados artificiais na homologação para simular sucesso.
+
+Encerramento com worker ausente, envios bloqueados, painel privado e dados locais preservados. Nenhuma nova implantação foi feita na auditoria. O relatório completo de segurança é privado. O próximo teste com comentário real e qualquer envio real dependem de autorização em outra sessão.
 
 ### Configuração na Meta e próxima etapa
 

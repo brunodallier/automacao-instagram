@@ -193,6 +193,29 @@ afterEach(async () => {
   await client.workspace.delete({ where: { id: workspaceId } });
 });
 describe("fluxo real do motor em PostgreSQL isolado", () => {
+  it("confirma exemplos assinados ignorados sem relaxar o vínculo e persiste conta válida mesmo sem envios", async () => {
+    await client.socialAccount.update({ where: { id: accountId }, data: { status: "NOT_CONNECTED" } });
+    const handlers = webhookHandlers(client, { ...settings, mode: "disabled", metaValidated: false }, () => clock);
+    const post = (payload: unknown) => {
+      const raw = JSON.stringify(payload);
+      return handlers.POST(new Request("https://fixture.invalid/api/webhooks/instagram", {
+        method: "POST", body: raw,
+        headers: { "Content-Type": "application/json", "X-Hub-Signature-256": "sha256=" + createHmac("sha256", settings.appSecret).update(raw).digest("hex") },
+      }));
+    };
+    const otherAccount = comment();
+    otherAccount.entry[0].id = "999999999999999";
+    expect((await post(otherAccount)).status).toBe(200);
+    const incomplete = comment();
+    expect((await post({ ...incomplete, entry: incomplete.entry.map(entry => ({ ...entry, time: undefined })) })).status).toBe(200);
+    expect(await client.instagramWebhookEvent.count({ where: { socialAccountId: accountId } })).toBe(0);
+    expect(await client.instagramJob.count({ where: { socialAccountId: accountId } })).toBe(0);
+    expect((await post(comment())).status).toBe(200);
+    expect(await client.instagramWebhookEvent.count({ where: { socialAccountId: accountId } })).toBe(1);
+    expect(await client.instagramJob.count({ where: { socialAccountId: accountId } })).toBe(1);
+    expect(await client.instagramOutbound.count({ where: { run: { socialAccountId: accountId } } })).toBe(0);
+    expect(sends).toEqual([]);
+  });
   it("recebe assinatura real HMAC, persiste antes do 200 e deduplica reentregas", async () => {
     await activate();
     const handlers = webhookHandlers(client, settings, () => clock),

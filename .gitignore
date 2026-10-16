@@ -20,6 +20,15 @@ Thumbs.db
 .vscode/
 *.pem
 *.key
+*.p12
+*.pfx
+*.ppk
+id_rsa
+id_dsa
+id_ecdsa
+id_ed25519
+*_ed25519
+.pgpass
 deploy/secrets/
 deploy/backups/
 deploy/production.env
@@ -27,6 +36,7 @@ deploy/webhook-reception.env
 deploy/cloudflare/
 *.dump
 *.sql.gz
+backups/
 *.private
 *.private.json
 __pycache__/
