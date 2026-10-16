@@ -41,6 +41,23 @@ O diagnóstico na VPS substitui apenas o container web desse projeto, mantendo i
 
 Não há evidência capturada sobre o cabeçalho do exemplo anterior, pois ele foi corretamente omitido dos logs. Uma nova tentativa observará presença e formato, inclusive a eventual presença do cabeçalho legado, sem presumir que exemplos do botão Testar tenham dispensa de assinatura. IDs de exemplo que não correspondam à conta autorizada podem ser ignorados após HMAC válido; essa situação é distinta de HTTP 401.
 
+### Resultado do diagnóstico na VPS — 15/10/2026, 22:10 (Brasília)
+
+A instrumentação foi instalada somente no web, com HMAC obrigatório e expiração às 23:06:37. Passaram as sondas diretas e através do Caddy, com corpo UTF8 incluindo espaços e CRLF. Assinaturas sobre JSON re-serializado, corpo adulterado, formato inválido, ausência de SHA256 e apenas SHA1 foram rejeitadas. Esses registros iniciais, às 22:06:50, são sondas do Pulso, não eventos da Meta.
+
+Após o proprietário repetir `comments` v26.0, os novos registros às **22:10:11.996** e **22:10:43.578** mostraram:
+
+- `signature256Present=true`, `signature256FormatValid=true` e `legacySignaturePresent=true`.
+- `rawBodyRead=true`, com resultado `HMAC_MISMATCH` antes de interpretar o JSON.
+- HTTP 401 nos mesmos horários no monitor do Caddy.
+- Zero eventos, tarefas ou saídas no banco de homologação; serviços saudáveis e worker ausente.
+
+Está identificada a causa imediata da rejeição: assinatura SHA256 presente e bem formada, mas divergente do HMAC calculado pelo receptor sobre os bytes recebidos com o segredo configurado. Não foi ausência de cabeçalho ou erro de formato. O cabeçalho SHA1 foi apenas observado como presente e não foi usado para aceitar o evento.
+
+A configuração do Caddy corresponde ao arquivo revisado, e as sondas confirmaram preservação dos bytes e do cabeçalho nesse caminho. Uma sonda adicional do PC às **22:11:39** recebeu HTTP 200, confirmando novamente igualdade do segredo local e do receptor; ela usou envelope vazio, não chamou a API do Instagram e não criou eventos. Esse HTTP 200 não pertence à Meta.
+
+A divergência ainda não comprova qual segredo/aplicativo a Meta utilizou. Falta identificar o App ID do aplicativo onde o teste foi acionado e verificar a associação com segurança, sem alterar nem expor credenciais. Não concluir que o botão Testar dispensa assinatura; o teste observado enviou SHA256 válido no formato. Nenhuma proteção, credencial, inscrição, publicação ou envio foi alterado nesta verificação.
+
 ### Configuração na Meta e próxima etapa
 
 No aplicativo correto, em Instagram → API setup with Instagram login → Webhooks, configurar:
