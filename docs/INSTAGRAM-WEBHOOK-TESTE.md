@@ -1,6 +1,6 @@
 # Primeiro teste controlado: somente receber eventos
 
-Receptor de homologação publicado com autorização em 15/10/2026. **Somente o callback HTTPS está disponível; painel e envios reais permanecem bloqueados.** Nenhum dado local foi migrado. O proprietário confirmou a verificação do callback no painel da Meta, mas o teste POST de `comments` foi rejeitado com HTTP 401; a validação de assinatura de um evento da Meta e a inscrição da conta ainda estão pendentes. O teste de envio continua exigindo autorização própria com destinatário e textos definidos.
+Receptor de homologação publicado com autorização em 15/10/2026. **Somente o callback HTTPS está disponível; painel e envios reais permanecem bloqueados.** Nenhum dado local foi migrado. O desafio da Meta foi confirmado pelo proprietário; o HTTP 401 do POST foi diagnosticado: o segredo do produto Instagram Login corresponde à assinatura real, enquanto a credencial ativa anterior diverge. A correção local foi autorizada e aplicada; a execução administrativa na VPS e o novo teste de aceitação pela credencial ativa ainda estão pendentes. A inscrição da conta também permanece pendente. O teste de envio continua exigindo autorização própria com destinatário e textos definidos.
 
 ## Estado verificado na VPS — 15/10/2026
 
@@ -90,7 +90,31 @@ A instalação temporária ficou pronta às 22:51 de 15/10/2026, horário de Bra
 
 Isso comprova a causa deste 401: a credencial ativa é válida para o aplicativo geral, mas não corresponde à chave que assinou o webhook observado. O candidato do produto Instagram Login corresponde. Não é necessário gerar ou redefinir segredos na Meta. O teste refuta, para esse POST, a hipótese de ausência de assinatura ou de modificação do corpo entre os dois cálculos. A assinatura continuou obrigatória; a credencial ativa e o `.env` local não foram alterados nesta verificação.
 
-**Correção proposta, ainda não autorizada/aplicada:** usar o candidato comprovado como `INSTAGRAM_APP_SECRET` no receptor e no `.env` local, com backups privados das configurações anteriores. Recriar somente o serviço web para carregar o segredo, retirar o candidato da comparação e validar saúde, desafio, HMAC, bloqueio das rotas do painel, ausência de worker/token/envios e preservação dos demais containers. Não reiniciar PostgreSQL ou Caddy, alterar DNS, inscrever a conta ou publicar o aplicativo. Se a validação falhar, restaurar o segredo anterior e recriar somente o web. Depois repetir o teste da Meta para comprovar assinatura ativa válida e HTTP 200; a persistência de evento da conta real é uma verificação posterior distinta. Essa troca exige autorização do proprietário antes de qualquer escrita nas credenciais.
+**Plano de correção autorizado pelo proprietário:** usar o candidato comprovado como `INSTAGRAM_APP_SECRET` no receptor e no `.env` local, com backups privados das configurações anteriores. Recriar somente o serviço web para carregar o segredo, retirar o candidato da comparação e validar saúde, desafio, HMAC, bloqueio das rotas do painel, ausência de worker/token/envios e preservação dos demais containers. Não reiniciar PostgreSQL ou Caddy, alterar DNS, inscrever a conta ou publicar o aplicativo. Se a validação falhar, restaurar o segredo anterior e recriar somente o web. Depois repetir o teste da Meta para comprovar assinatura ativa válida e HTTP 200; a persistência de evento da conta real é uma verificação posterior distinta.
+
+#### Execução da correção: local concluído, VPS aguardando sudo
+
+A inspeção dos usos de `INSTAGRAM_APP_SECRET` confirmou somente validação HMAC e checagens de prontidão. Consulta de perfil, sincronização de Reels e autenticação de leitura usam `INSTAGRAM_ACCESS_TOKEN`, sem depender desse segredo. Não há troca OAuth ou geração de `appsecret_proof` implementada. Nenhum fluxo de autenticação foi modificado.
+
+O `.env` local foi atualizado preservando integralmente o restante do texto e das variáveis; token e bloqueios de envio/recepção local permanecem intactos. A consulta de leitura à Meta antes e depois retornou `CONNECTED` com a mesma conta fixada. Backup: pasta privada `pulso-hostinger/webhook-secret-correction-20261015`, arquivo `.env.before.private`, fora do repositório. Tanto ele quanto o `.env` têm ACL restrita ao proprietário do Windows e SYSTEM. O arquivo intermediário da troca foi consumido; a cópia privada original do candidato permanece pendente de limpeza.
+
+Passaram novamente 126 testes unitários e oito de runtime. Em Compose descartável, a troca do segredo com recriação exclusiva do web foi validada: chave anterior rejeitada com 401, nova aceita com 200, desafio preservado, candidato desmontado, painel bloqueado, dados mantidos e nenhuma saída. A reversão também passou: a chave anterior voltou a funcionar e a nova foi rejeitada. PostgreSQL e Caddy mantiveram IDs, início e reinícios durante a troca/reversão; outros projetos permaneceram intactos. Nenhum dado ou segredo real foi usado nesse ensaio.
+
+O pacote administrativo `/srv/pulso/preparation/webhook-secret-correction-20261015` está preparado e verificado, mas não iniciado. Como o sudo da sessão SSH exige senha e a autenticação já feita no Web Terminal não é compartilhada entre sessões, a próxima execução indispensável é:
+
+```bash
+sudo bash /srv/pulso/preparation/webhook-secret-correction-20261015/start-secret-correction.sh
+```
+
+Ele cria e confere backups privados antes de substituir atomicamente somente o arquivo de assinatura. Recria exclusivamente o web, usando a imagem já instalada; não faz build, migrations ou restore. O candidato fica desmontado, a observação sanitizada dura uma hora e o arquivo temporário do candidato na VPS é removido somente após as sondas de HTTPS/HMAC, desafio, isolamento e contagens inalteradas. O segredo anterior é mantido no backup privado; credenciais não aparecem em comandos, logs, imagens ou Git.
+
+Falha nas verificações dispara restauração automática do segredo anterior e recriação somente do web. O procedimento manual equivalente, disponível após o backup ter sido criado, é:
+
+```bash
+sudo bash /srv/pulso/private/webhook-secret-correction-20261015/rollback-secret-correction.sh
+```
+
+Para reverter o ambiente local, recuperar somente o valor anterior de `INSTAGRAM_APP_SECRET` do backup privado, preservando eventuais edições posteriores nas outras variáveis e a ACL restrita. Não copiar configurações inteiras sobre mudanças novas. Ainda não declarar a correção da VPS ou o HTTP 200 da Meta concluídos: verificar a execução administrativa e depois solicitar novo `comments` v26.0 ao proprietário.
 
 ### Configuração na Meta e próxima etapa
 

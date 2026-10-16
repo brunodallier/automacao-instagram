@@ -30,7 +30,7 @@ A resposta pública alternativa nunca é disparada por atraso, aceite, timeout o
 
 ## Configuração privada e bloqueios
 
-O `.env` local foi preservado. O proprietário configurou `INSTAGRAM_APP_SECRET` manualmente; em 15/10/2026 foi validado o formato esperado e o HMAC em memória, sem imprimir, transmitir ou persistir o segredo/assinatura. Isso não comprova ainda que corresponde ao aplicativo: será confirmado por evento real assinado da Meta. `INSTAGRAM_WEBHOOK_VERIFY_TOKEN` já foi gerado privadamente. A migração nova **não** foi aplicada ao banco local. [Preparação do primeiro teste somente de recepção](INSTAGRAM-WEBHOOK-TESTE.md).
+Em 15/10/2026, um POST de teste da Meta comprovou que a assinatura corresponde ao segredo do produto Instagram Login e diverge do segredo do aplicativo geral anteriormente configurado. Com autorização do proprietário, somente `INSTAGRAM_APP_SECRET` foi atualizado no `.env` local, com backup privado. A autenticação de leitura continuou funcionando com o mesmo access token e a conta fixada; nenhuma outra variável foi alterada. A atualização do receptor exige executar o procedimento administrativo já preparado na VPS e repetir o teste da Meta. `INSTAGRAM_WEBHOOK_VERIFY_TOKEN` permanece intacto. A migração nova **não** foi aplicada ao banco local. [Estado e procedimento do receptor](INSTAGRAM-WEBHOOK-TESTE.md).
 
 | Configuração | Comportamento |
 | --- | --- |
@@ -40,7 +40,7 @@ O `.env` local foi preservado. O proprietário configurou `INSTAGRAM_APP_SECRET`
 | `INSTAGRAM_EXECUTION_ACCOUNT_ID` | ID real da conta já vinculada; deve corresponder à identidade do token |
 | `INSTAGRAM_TEST_COMMENT_ID`, `INSTAGRAM_TEST_RECIPIENT_ID` | Restringem o modo controlado; não inventar IDs nem usar comentário de terceiro sem autorização |
 | `INSTAGRAM_WEBHOOK_ENABLED` | `false` por padrão; habilitar apenas após preparar callback seguro |
-| `INSTAGRAM_APP_SECRET` | Segredo do aplicativo, usado somente para assinatura de webhook |
+| `INSTAGRAM_APP_SECRET` | Instagram app secret do produto Instagram Login, usado para HMAC do webhook e checagens de prontidão; pode diferir do segredo do aplicativo geral |
 | `INSTAGRAM_WEBHOOK_VERIFY_TOKEN` | Segredo independente para o desafio, pelo menos 32 caracteres |
 | `INSTAGRAM_SUBSCRIPTION_SETUP_APPROVED` | `false`; não altera inscrições automaticamente |
 
