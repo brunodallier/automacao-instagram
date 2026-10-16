@@ -58,6 +58,14 @@ A configuração do Caddy corresponde ao arquivo revisado, e as sondas confirmar
 
 A divergência ainda não comprova qual segredo/aplicativo a Meta utilizou. Falta identificar o App ID do aplicativo onde o teste foi acionado e verificar a associação com segurança, sem alterar nem expor credenciais. Não concluir que o botão Testar dispensa assinatura; o teste observado enviou SHA256 válido no formato. Nenhuma proteção, credencial, inscrição, publicação ou envio foi alterado nesta verificação.
 
+### Verificação do App ID geral informado pelo proprietário
+
+Uma consulta GET à Graph API v26.0, restrita a `id,name`, confirmou o nome Pulso e o mesmo App ID fornecido pelo proprietário. A autenticação foi composta em memória a partir do par existente, somente no cabeçalho HTTPS, sem credenciais na URL, emissão/renovação de token ou persistência dessa credencial. Um controle com segredo fictício foi rejeitado pela autenticação. Assim, o segredo configurado é válido para **esse App ID**, sem provar que essa seja a identificação da integração Instagram que originou o POST.
+
+Uma leitura adicional de `/{app-id}/subscriptions` retornou HTTP 200 com lista vazia, embora o painel do produto Instagram mostre campos assinados. Essa diferença exige identificar o “Instagram App ID” na configuração de Instagram Login e comparar os contextos; não permite concluir automaticamente que falte inscrever campos ou que o segredo deva ser trocado. Nenhum POST de inscrição, mudança de segredo ou alteração de publicação foi executado. A rejeição dos eventos permanece `HMAC_MISMATCH` até nova evidência.
+
+Referência do formato de autenticação em memória: [SDK oficial arquivado da Meta, FacebookApp::getAccessToken](https://github.com/facebookarchive/php-graph-sdk/blob/5.x/src/Facebook/FacebookApp.php). O resultado atual da associação decorre das respostas reais da API e do controle negativo, não da idade desse SDK.
+
 ### Configuração na Meta e próxima etapa
 
 No aplicativo correto, em Instagram → API setup with Instagram login → Webhooks, configurar:
