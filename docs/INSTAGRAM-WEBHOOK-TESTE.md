@@ -1,6 +1,6 @@
 # Primeiro teste controlado: somente receber eventos
 
-Receptor de homologação publicado com autorização em 15/10/2026. **Somente o callback HTTPS está disponível; painel e envios reais permanecem bloqueados.** Nenhum dado local foi migrado. O desafio da Meta foi confirmado pelo proprietário; o HTTP 401 do POST foi diagnosticado: o segredo do produto Instagram Login corresponde à assinatura real, enquanto a credencial ativa anterior diverge. A correção local foi autorizada e aplicada; a execução administrativa na VPS e o novo teste de aceitação pela credencial ativa ainda estão pendentes. A inscrição da conta também permanece pendente. O teste de envio continua exigindo autorização própria com destinatário e textos definidos.
+Receptor de homologação publicado com autorização em 15/10/2026. **Somente o callback HTTPS está disponível; painel e envios reais permanecem bloqueados.** Nenhum dado local foi migrado. O desafio da Meta foi confirmado pelo proprietário; o HTTP 401 do POST foi diagnosticado: o segredo do produto Instagram Login corresponde à assinatura real, enquanto a credencial ativa anterior diverge. A correção foi autorizada e aplicada localmente e na VPS; sondas públicas com a nova credencial receberam HTTP 200. O novo teste da própria Meta ainda está pendente, assim como a inscrição da conta. O teste de envio continua exigindo autorização própria com destinatário e textos definidos.
 
 ## Estado verificado na VPS — 15/10/2026
 
@@ -92,7 +92,7 @@ Isso comprova a causa deste 401: a credencial ativa é válida para o aplicativo
 
 **Plano de correção autorizado pelo proprietário:** usar o candidato comprovado como `INSTAGRAM_APP_SECRET` no receptor e no `.env` local, com backups privados das configurações anteriores. Recriar somente o serviço web para carregar o segredo, retirar o candidato da comparação e validar saúde, desafio, HMAC, bloqueio das rotas do painel, ausência de worker/token/envios e preservação dos demais containers. Não reiniciar PostgreSQL ou Caddy, alterar DNS, inscrever a conta ou publicar o aplicativo. Se a validação falhar, restaurar o segredo anterior e recriar somente o web. Depois repetir o teste da Meta para comprovar assinatura ativa válida e HTTP 200; a persistência de evento da conta real é uma verificação posterior distinta.
 
-#### Execução da correção: local concluído, VPS aguardando sudo
+#### Execução da correção autorizada
 
 A inspeção dos usos de `INSTAGRAM_APP_SECRET` confirmou somente validação HMAC e checagens de prontidão. Consulta de perfil, sincronização de Reels e autenticação de leitura usam `INSTAGRAM_ACCESS_TOKEN`, sem depender desse segredo. Não há troca OAuth ou geração de `appsecret_proof` implementada. Nenhum fluxo de autenticação foi modificado.
 
@@ -100,7 +100,7 @@ O `.env` local foi atualizado preservando integralmente o restante do texto e da
 
 Passaram novamente 126 testes unitários e oito de runtime. Em Compose descartável, a troca do segredo com recriação exclusiva do web foi validada: chave anterior rejeitada com 401, nova aceita com 200, desafio preservado, candidato desmontado, painel bloqueado, dados mantidos e nenhuma saída. A reversão também passou: a chave anterior voltou a funcionar e a nova foi rejeitada. PostgreSQL e Caddy mantiveram IDs, início e reinícios durante a troca/reversão; outros projetos permaneceram intactos. Nenhum dado ou segredo real foi usado nesse ensaio.
 
-O pacote administrativo `/srv/pulso/preparation/webhook-secret-correction-20261015` está preparado e verificado, mas não iniciado. Como o sudo da sessão SSH exige senha e a autenticação já feita no Web Terminal não é compartilhada entre sessões, a próxima execução indispensável é:
+O pacote administrativo `/srv/pulso/preparation/webhook-secret-correction-20261015` foi verificado e executado pelo proprietário no Web Terminal, pois o sudo da sessão SSH exige senha e a autenticação administrativa não é compartilhada entre sessões. **Execução já concluída; não repetir o instalador:**
 
 ```bash
 sudo bash /srv/pulso/preparation/webhook-secret-correction-20261015/start-secret-correction.sh
@@ -114,7 +114,13 @@ Falha nas verificações dispara restauração automática do segredo anterior e
 sudo bash /srv/pulso/private/webhook-secret-correction-20261015/rollback-secret-correction.sh
 ```
 
-Para reverter o ambiente local, recuperar somente o valor anterior de `INSTAGRAM_APP_SECRET` do backup privado, preservando eventuais edições posteriores nas outras variáveis e a ACL restrita. Não copiar configurações inteiras sobre mudanças novas. Ainda não declarar a correção da VPS ou o HTTP 200 da Meta concluídos: verificar a execução administrativa e depois solicitar novo `comments` v26.0 ao proprietário.
+Para reverter o ambiente local, recuperar somente o valor anterior de `INSTAGRAM_APP_SECRET` do backup privado, preservando eventuais edições posteriores nas outras variáveis e a ACL restrita. Não copiar configurações inteiras sobre mudanças novas.
+
+**Resultado confirmado às 23:23 de 15/10/2026 (Brasília):** instalação em estado `READY`; web, Caddy e PostgreSQL saudáveis, sem erros no monitor. O segredo foi atualizado com backup privado; candidato desmontado e arquivo temporário removido na VPS. Contagens de eventos, tarefas, saídas, proprietários, Reels e automações da homologação permaneceram zero. PostgreSQL, Caddy e outros contêineres não foram reiniciados; worker ausente, envios desativados e nenhum access token no receptor. A cópia temporária local do candidato permanece protegida, com limpeza pendente.
+
+Uma sonda adicional do PC, entre **23:24:20 e 23:24:22**, validou o caminho público com certificado HTTPS confiável. O HMAC produzido em memória a partir do novo segredo do `.env` local recebeu 200; o segredo anterior, corpo adulterado e requisição sem assinatura receberam 401. As rotas administrativas verificadas retornaram 404 e o site público da Vercel retornou 200. A consulta de leitura à Meta continuou `CONNECTED`, com a mesma conta e o token existente. Nova comparação confirmou somente a alteração de `INSTAGRAM_APP_SECRET` e ausência de credenciais antigas/novas nos arquivos rastreados.
+
+Esses HTTP 200 são **sondas do Pulso com envelope vazio**, sem chamadas à API da Meta, persistência de eventos ou envio de mensagens. O monitor sanitizado está ativo até **00:23:08 de 16/10/2026 (Brasília)**. Próxima ação: repetir uma vez `comments` v26.0 na Meta e correlacionar o POST com `VALID_SIGNATURE`, HTTP 200 e o resultado de ingestão. Não confundir exemplo com IDs desconhecidos, que pode ser autenticado e ignorado, com evento da conta real persistido.
 
 ### Configuração na Meta e próxima etapa
 

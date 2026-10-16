@@ -30,7 +30,7 @@ A resposta pública alternativa nunca é disparada por atraso, aceite, timeout o
 
 ## Configuração privada e bloqueios
 
-Em 15/10/2026, um POST de teste da Meta comprovou que a assinatura corresponde ao segredo do produto Instagram Login e diverge do segredo do aplicativo geral anteriormente configurado. Com autorização do proprietário, somente `INSTAGRAM_APP_SECRET` foi atualizado no `.env` local, com backup privado. A autenticação de leitura continuou funcionando com o mesmo access token e a conta fixada; nenhuma outra variável foi alterada. A atualização do receptor exige executar o procedimento administrativo já preparado na VPS e repetir o teste da Meta. `INSTAGRAM_WEBHOOK_VERIFY_TOKEN` permanece intacto. A migração nova **não** foi aplicada ao banco local. [Estado e procedimento do receptor](INSTAGRAM-WEBHOOK-TESTE.md).
+Em 15/10/2026, um POST de teste da Meta comprovou que a assinatura corresponde ao segredo do produto Instagram Login e diverge do segredo do aplicativo geral anteriormente configurado. Com autorização do proprietário, somente `INSTAGRAM_APP_SECRET` foi atualizado no `.env` local e no receptor da VPS, com backups privados. Apenas o serviço web foi recriado. A autenticação de leitura continuou funcionando com o mesmo access token e a conta fixada; nenhuma outra variável local foi alterada. Sondas públicas confirmaram HTTP 200 com o novo segredo e 401 com o anterior, corpo adulterado ou assinatura ausente. Ainda é necessário repetir o teste da própria Meta após a correção. `INSTAGRAM_WEBHOOK_VERIFY_TOKEN` permanece intacto. A migração nova **não** foi aplicada ao banco local. [Estado e procedimento do receptor](INSTAGRAM-WEBHOOK-TESTE.md).
 
 | Configuração | Comportamento |
 | --- | --- |
