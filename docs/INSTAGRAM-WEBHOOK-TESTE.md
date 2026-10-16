@@ -78,6 +78,20 @@ Os testes devem comprovar que candidato correto não autoriza ingestão, chave a
 
 Validação da comparação: 126 testes unitários, oito de runtime, TypeScript e lint passaram. A suite Docker construiu a imagem de produção e confirmou HTTPS, isolamento, HMAC, candidato sem poder de autenticação, persistência/deduplicação somente com a chave ativa e ausência de valores privados nos logs. Seus volumes descartáveis foram removidos e os demais contêineres preservados. O coletor de diagnóstico também passou pelos testes de lista explícita de campos e descarte de valores inesperados. Nada dessa suite utilizou credenciais ou dados reais.
 
+#### Resultado do novo teste da Meta: causa comprovada
+
+A instalação temporária ficou pronta às 22:51 de 15/10/2026, horário de Brasília. As sondas próprias das 22:51:14–15 validaram os caminhos direto e Caddy; não são eventos da Meta. Após o proprietário confirmar que repetiu `comments` v26.0, foi observado um novo POST às **22:56:52.966** (01:56:52.966 UTC de 16/10), com:
+
+- Assinatura SHA256 presente e com formato válido; corpo original lido.
+- `result=HMAC_MISMATCH` com a credencial ativa.
+- `candidateHmacMatches=true` com o segredo existente do produto Instagram Login, sobre os mesmos bytes e a mesma assinatura.
+- HTTP **401** no Caddy às 22:56:52.967, pois a comparação não autoriza ingestão.
+- Web, Caddy e PostgreSQL saudáveis, nenhum erro no monitor e zero eventos, tarefas e saídas no banco de homologação. Worker ausente, modo de envio `disabled` e nenhum access token no receptor.
+
+Isso comprova a causa deste 401: a credencial ativa é válida para o aplicativo geral, mas não corresponde à chave que assinou o webhook observado. O candidato do produto Instagram Login corresponde. Não é necessário gerar ou redefinir segredos na Meta. O teste refuta, para esse POST, a hipótese de ausência de assinatura ou de modificação do corpo entre os dois cálculos. A assinatura continuou obrigatória; a credencial ativa e o `.env` local não foram alterados nesta verificação.
+
+**Correção proposta, ainda não autorizada/aplicada:** usar o candidato comprovado como `INSTAGRAM_APP_SECRET` no receptor e no `.env` local, com backups privados das configurações anteriores. Recriar somente o serviço web para carregar o segredo, retirar o candidato da comparação e validar saúde, desafio, HMAC, bloqueio das rotas do painel, ausência de worker/token/envios e preservação dos demais containers. Não reiniciar PostgreSQL ou Caddy, alterar DNS, inscrever a conta ou publicar o aplicativo. Se a validação falhar, restaurar o segredo anterior e recriar somente o web. Depois repetir o teste da Meta para comprovar assinatura ativa válida e HTTP 200; a persistência de evento da conta real é uma verificação posterior distinta. Essa troca exige autorização do proprietário antes de qualquer escrita nas credenciais.
+
 ### Configuração na Meta e próxima etapa
 
 No aplicativo correto, em Instagram → API setup with Instagram login → Webhooks, configurar:
