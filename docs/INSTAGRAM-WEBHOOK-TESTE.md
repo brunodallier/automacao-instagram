@@ -1,6 +1,6 @@
 # Primeiro teste controlado: somente receber eventos
 
-Receptor de homologação publicado com autorização em 15/10/2026. **Somente o callback HTTPS está disponível; painel e envios reais permanecem bloqueados.** Nenhum dado local foi migrado. O desafio da Meta foi confirmado pelo proprietário; o HTTP 401 do POST foi diagnosticado: o segredo do produto Instagram Login corresponde à assinatura real, enquanto a credencial ativa anterior diverge. A correção foi autorizada e aplicada localmente e na VPS; sondas públicas com a nova credencial receberam HTTP 200. O novo teste da própria Meta ainda está pendente, assim como a inscrição da conta. O teste de envio continua exigindo autorização própria com destinatário e textos definidos.
+Receptor de homologação publicado com autorização em 15/10/2026. **Somente o callback HTTPS está disponível; painel e envios reais permanecem bloqueados.** Nenhum dado local foi migrado. O desafio da Meta foi confirmado pelo proprietário; a divergência do segredo HMAC foi corrigida com autorização no ambiente local e na VPS. O teste posterior `comments` v26.0 da própria Meta chegou com HMAC válido e HTTP 200 em duas entregas. A homologação permaneceu com zero eventos e tarefas; a persistência de evento da conta real e sua inscrição continuam pendentes. O teste de envio continua exigindo autorização própria com destinatário e textos definidos.
 
 ## Estado verificado na VPS — 15/10/2026
 
@@ -121,6 +121,21 @@ Para reverter o ambiente local, recuperar somente o valor anterior de `INSTAGRAM
 Uma sonda adicional do PC, entre **23:24:20 e 23:24:22**, validou o caminho público com certificado HTTPS confiável. O HMAC produzido em memória a partir do novo segredo do `.env` local recebeu 200; o segredo anterior, corpo adulterado e requisição sem assinatura receberam 401. As rotas administrativas verificadas retornaram 404 e o site público da Vercel retornou 200. A consulta de leitura à Meta continuou `CONNECTED`, com a mesma conta e o token existente. Nova comparação confirmou somente a alteração de `INSTAGRAM_APP_SECRET` e ausência de credenciais antigas/novas nos arquivos rastreados.
 
 Esses HTTP 200 são **sondas do Pulso com envelope vazio**, sem chamadas à API da Meta, persistência de eventos ou envio de mensagens. O monitor sanitizado está ativo até **00:23:08 de 16/10/2026 (Brasília)**. Próxima ação: repetir uma vez `comments` v26.0 na Meta e correlacionar o POST com `VALID_SIGNATURE`, HTTP 200 e o resultado de ingestão. Não confundir exemplo com IDs desconhecidos, que pode ser autenticado e ignorado, com evento da conta real persistido.
+
+#### Teste da Meta após a correção: HMAC válido, persistência ainda não comprovada
+
+Após o proprietário confirmar o novo teste `comments` v26.0, o monitor registrou duas entregas adicionais, distintas das sondas do Pulso:
+
+| Horário de Brasília em 15/10/2026 | HMAC do receptor | HTTP no Caddy |
+| --- | --- | --- |
+| 23:28:25.610 | `VALID_SIGNATURE` | 200 às 23:28:25.614 |
+| 23:28:39.981 | `VALID_SIGNATURE` | 200 às 23:28:39.983 |
+
+Ambas tinham SHA256 presente e no formato esperado, com validação sobre o corpo original. O candidato estava desmontado (`candidateHmacMatches=null`); a autenticação foi feita pela credencial ativa corrigida. O monitor estava sem erros, os três serviços saudáveis, o web em redes internas e sem access token, o worker ausente e os envios desativados.
+
+**Não houve evento registrado no banco de homologação:** eventos, tarefas, saídas e atividades continuaram zero. O HTTP 200 comprova autenticação, envelope válido e conclusão do processamento de ingestão; não comprova criação de registro. O código persiste apenas eventos normalizados elegíveis vinculados unicamente à conta fixada e ao workspace. Eventos de exemplo que não atendam a esses critérios são ignorados com 200. Como o diagnóstico não captura payloads ou identificadores de requisições, não é possível afirmar qual filtro ignorou esse exemplo somente a partir dos registros disponíveis. Não relaxar os vínculos nem inserir dados artificiais para produzir uma contagem positiva.
+
+A consulta segura `npm run instagram:webhooks:check`, após esse teste, retornou novamente `NOT_SUBSCRIBED`, com `apps=[]` e `readOnly=true`. Não houve POST de inscrição. Essa pendência da conta é distinta do sucesso do teste de exemplo; ainda é necessário preparar/aprovar a inscrição para recepção e depois comprovar um comentário real elegível, com HMAC válido e evento/tarefa persistidos, mantendo o worker parado. Não publicar o aplicativo nem habilitar envios para contornar requisitos de permissões, papéis ou modo da Meta.
 
 ### Configuração na Meta e próxima etapa
 
