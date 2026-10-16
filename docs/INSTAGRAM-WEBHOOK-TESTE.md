@@ -25,6 +25,22 @@ Uma sonda separada do próprio Pulso, às 21:44:31, enviou somente um envelope v
 
 Nova consulta de leitura da inscrição da conta retornou `NOT_SUBSCRIBED`, sem aplicativos listados. Nenhuma inscrição foi aplicada. Resolver a autenticação do webhook e repetir o teste antes de avançar à inscrição para eventos reais. O monitor temporário apenas lê Docker e contagens em transação SQL explicitamente read-only; encerra automaticamente e preserva o relatório, sem serviço permanente ou alteração de sudoers.
 
+### Diagnóstico de assinatura sem valores privados
+
+O receptor possui observabilidade opcional, sem alterar respostas, ordem de validação ou regras de execução. Fica desligada por padrão e só é habilitada quando `INSTAGRAM_WEBHOOK_DIAGNOSTICS=true` e `INSTAGRAM_WEBHOOK_DIAGNOSTICS_UNTIL` contém um prazo futuro em milissegundos Unix, dentro das próximas 24 horas. Ao vencer o prazo, o registro para automaticamente, sem reiniciar o serviço. A homologação usa uma janela de uma hora.
+
+Cada registro contém exclusivamente `event`, `at`, `signature256Present`, `signature256FormatValid`, `legacySignaturePresent`, `rawBodyRead`, `result`. Não inclui conteúdo, URLs, IDs da conta, IPs, cabeçalhos, assinaturas, hashes, segredos ou credenciais. O resultado distingue `MISSING_SIGNATURE`, `INVALID_SIGNATURE_FORMAT`, `HMAC_MISMATCH`, `VALID_SIGNATURE`. A presença de SHA1 é observada somente como booleano: SHA1 nunca substitui a exigência de SHA256. Falha no registro não altera a autenticação.
+
+`rawBodyRead=true` significa que o corpo original foi lido como bytes por `boundedWebhookBody`, antes de `JSON.parse`. Não existe middleware/proxy no código nem normalização/re-serialização JSON anterior ao HMAC. O Caddy configurado remove somente Authorization e Cookie; mantém a assinatura e limita o tamanho do corpo. Essas verificações de código/configuração precisam ser confirmadas no receptor com sondas diretas e por Caddy, incluindo espaços, CRLF e Unicode, e assinatura propositalmente calculada sobre JSON re-serializado (deve falhar).
+
+Testes locais com segredos exclusivamente fictícios passaram: 123 unitários, TypeScript, lint, build Docker de produção e teste completo de recepção isolada. A suite verifica os quatro resultados, ausência de valores privados nos logs, preservação de bytes por HTTPS/Caddy e manutenção dos bloqueios do painel, worker, token e saída de internet. O coletor possui lista fechada de campos/tipos; registros com campos adicionais são descartados.
+
+O diagnóstico na VPS substitui apenas o container web desse projeto, mantendo imagem anterior para rollback. Não executa migrations, restaura dados, altera Caddy/DNS, credenciais ou worker. As sondas usam envelopes vazios e não criam eventos. A instalação e o novo teste da própria Meta são etapas separadas: não considerar os resultados das sondas como evidência de assinatura da Meta.
+
+**Limite da associação com o aplicativo:** a igualdade do segredo entre o PC e o receptor pode ser verificada sem exportá-lo, por uma requisição assinada em memória aceita pelo receptor. Isso não revela a qual aplicativo Meta o segredo pertence. Não há App ID configurado localmente que permita verificar essa associação; o nome “Pulso”, o formato de 32 caracteres e a verificação GET não a comprovam. Não declarar essa correspondência confirmada sem evidência adicional do aplicativo correto. Não substituir credenciais antes de distinguir as causas do HTTP 401.
+
+Não há evidência capturada sobre o cabeçalho do exemplo anterior, pois ele foi corretamente omitido dos logs. Uma nova tentativa observará presença e formato, inclusive a eventual presença do cabeçalho legado, sem presumir que exemplos do botão Testar tenham dispensa de assinatura. IDs de exemplo que não correspondam à conta autorizada podem ser ignorados após HMAC válido; essa situação é distinta de HTTP 401.
+
 ### Configuração na Meta e próxima etapa
 
 No aplicativo correto, em Instagram → API setup with Instagram login → Webhooks, configurar:

@@ -14,6 +14,7 @@ import {
   executionSettings,
   executionConfigured,
   allowSend,
+  webhookDiagnosticsEnabled,
 } from "../../src/lib/instagram/execution/config";
 import type { PrismaClient } from "../../src/generated/prisma/client";
 const now = new Date("2026-10-14T15:00:00Z"),
@@ -42,6 +43,14 @@ const comment = {
   ],
 };
 describe("webhooks oficiais", () => {
+  it("diagnóstico fica desligado por padrão, exige prazo válido e expira automaticamente", () => {
+    const clock = now.getTime();
+    expect(webhookDiagnosticsEnabled({}, clock)).toBe(false);
+    expect(webhookDiagnosticsEnabled({ INSTAGRAM_WEBHOOK_DIAGNOSTICS: "true" }, clock)).toBe(false);
+    for (const deadline of ["NaN", "Infinity", String(clock), String(clock - 1), String(clock + 86400001)])
+      expect(webhookDiagnosticsEnabled({ INSTAGRAM_WEBHOOK_DIAGNOSTICS: "true", INSTAGRAM_WEBHOOK_DIAGNOSTICS_UNTIL: deadline }, clock)).toBe(false);
+    expect(webhookDiagnosticsEnabled({ INSTAGRAM_WEBHOOK_DIAGNOSTICS: "true", INSTAGRAM_WEBHOOK_DIAGNOSTICS_UNTIL: String(clock + 3600000) }, clock)).toBe(true);
+  });
   it("valida HMAC sobre os bytes originais, inclusive UTF8, sem aceitar SHA1", () => {
     const raw = Buffer.from('{"text":"ação 🌊"}'),
       signature =
@@ -198,6 +207,40 @@ describe("webhooks oficiais", () => {
     );
     expect(response.status).toBe(503);
     expect(await response.text()).not.toContain("privado");
+  });
+  it("distingue assinatura ausente, malformada e divergente sem exportar valores", async () => {
+    const sink = vi.fn();
+    const client = { socialAccount: { findMany: vi.fn(async () => []) } } as unknown as PrismaClient;
+    const handlers = webhookHandlers(client, config, () => now, sink);
+    const raw = '{\r\n "object": "instagram", "entry": [], "fixture": "ação 🌊 não registrar" \r\n}\n';
+    const signature = "sha256=" + createHmac("sha256", secret).update(Buffer.from(raw)).digest("hex");
+    const send = (value?: string, body = raw, legacy = false) => {
+      const headers = new Headers({ "content-type": "application/json" });
+      if (value !== undefined) headers.set("x-hub-signature-256", value);
+      if (legacy) headers.set("x-hub-signature", "sha1=fixture-private-signature");
+      return handlers.POST(new Request("https://fixture.invalid", { method: "POST", headers, body }));
+    };
+    expect((await send(undefined, raw, true)).status).toBe(401);
+    expect(sink.mock.calls.at(-1)?.[0]).toEqual({ signature256Present: false, signature256FormatValid: false, legacySignaturePresent: true, rawBodyRead: false, result: "MISSING_SIGNATURE" });
+    expect((await send("")).status).toBe(401);
+    expect(sink.mock.calls.at(-1)?.[0]).toMatchObject({ signature256Present: true, signature256FormatValid: false, result: "INVALID_SIGNATURE_FORMAT" });
+    expect((await send("sha256=malformed-private")).status).toBe(401);
+    expect(sink.mock.calls.at(-1)?.[0]).toMatchObject({ signature256Present: true, signature256FormatValid: false, rawBodyRead: false, result: "INVALID_SIGNATURE_FORMAT" });
+    expect((await send("sha256=" + "0".repeat(64))).status).toBe(401);
+    expect(sink.mock.calls.at(-1)?.[0]).toMatchObject({ signature256FormatValid: true, rawBodyRead: true, result: "HMAC_MISMATCH" });
+    expect((await send(signature)).status).toBe(200);
+    expect(sink.mock.calls.at(-1)?.[0]).toEqual({ signature256Present: true, signature256FormatValid: true, legacySignaturePresent: false, rawBodyRead: true, result: "VALID_SIGNATURE" });
+    expect((await send(signature, raw + " ")).status).toBe(401);
+    const reserialized = "sha256=" + createHmac("sha256", secret).update(JSON.stringify(JSON.parse(raw))).digest("hex");
+    expect((await send(reserialized)).status).toBe(401);
+    const serialized = JSON.stringify(sink.mock.calls);
+    for (const privateValue of [secret, signature, reserialized, raw, "não registrar", "malformed-private", "fixture-private-signature"])
+      expect(serialized).not.toContain(privateValue);
+    expect(client.socialAccount.findMany).toHaveBeenCalledTimes(1);
+  });
+  it("falha no diagnóstico não relaxa autenticação nem produz confirmação falsa", async () => {
+    const handlers = webhookHandlers({} as PrismaClient, config, () => now, () => { throw Error("fixture-private-error"); });
+    expect((await handlers.POST(new Request("https://fixture.invalid", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }))).status).toBe(401);
   });
 });
 describe("resultado real da API e travas de envio", () => {

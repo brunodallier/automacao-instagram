@@ -189,6 +189,7 @@ export function webhookHandlers(
   client: PrismaClient,
   settings: ExecutionSettings,
   now: () => Date = () => new Date(),
+  diagnose?: (entry: WebhookSignatureDiagnostic) => void,
 ) {
   const configured = () =>
     settings.webhookEnabled &&
@@ -228,8 +229,32 @@ export function webhookHandlers(
       )
         return response(415);
       const signature = request.headers.get("x-hub-signature-256");
-      if (!signature || !/^sha256=[a-fA-F0-9]{64}$/.test(signature))
+      const signatureFormatValid =
+        !!signature && /^sha256=[a-fA-F0-9]{64}$/.test(signature);
+      const report = (
+        result: WebhookSignatureDiagnostic["result"],
+        rawBodyRead: boolean,
+      ) => {
+        // An explicit allowlist: never pass headers, body, signature, hash or secret to the sink.
+        try {
+          diagnose?.({
+            signature256Present: request.headers.has("x-hub-signature-256"),
+            signature256FormatValid: signatureFormatValid,
+            legacySignaturePresent: request.headers.has("x-hub-signature"),
+            rawBodyRead,
+            result,
+          });
+        } catch {
+          // Observability must never change authentication or acknowledgment.
+        }
+      };
+      if (!signature || !signatureFormatValid) {
+        report(
+          signature === null ? "MISSING_SIGNATURE" : "INVALID_SIGNATURE_FORMAT",
+          false,
+        );
         return response(401);
+      }
       try {
         const raw = await boundedWebhookBody(request);
         if (
@@ -238,8 +263,11 @@ export function webhookHandlers(
             request.headers.get("x-hub-signature-256"),
             settings.appSecret,
           )
-        )
+        ) {
+          report("HMAC_MISMATCH", true);
           return response(401);
+        }
+        report("VALID_SIGNATURE", true);
         let events: NormalizedEvent[];
         try {
           events = normalizeWebhook(JSON.parse(raw.toString("utf8")), now());
@@ -264,3 +292,15 @@ export function webhookHandlers(
     },
   };
 }
+
+export type WebhookSignatureDiagnostic = {
+  signature256Present: boolean;
+  signature256FormatValid: boolean;
+  legacySignaturePresent: boolean;
+  rawBodyRead: boolean;
+  result:
+    | "MISSING_SIGNATURE"
+    | "INVALID_SIGNATURE_FORMAT"
+    | "HMAC_MISMATCH"
+    | "VALID_SIGNATURE";
+};

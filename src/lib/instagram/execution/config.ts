@@ -25,6 +25,16 @@ export function executionSettings(
 }
 export const graphId = (value: unknown): value is string =>
   typeof value === "string" && /^\d{1,120}$/.test(value);
+export function webhookDiagnosticsEnabled(
+  env: Record<string, string | undefined> = process.env,
+  now = Date.now(),
+) {
+  const until = Number(env.INSTAGRAM_WEBHOOK_DIAGNOSTICS_UNTIL);
+  return (
+    env.INSTAGRAM_WEBHOOK_DIAGNOSTICS === "true" &&
+    Number.isFinite(until) && until > now && until <= now + 86400000
+  );
+}
 export function executionConfigured(settings: ExecutionSettings) {
   return (
     settings.mode !== "disabled" &&

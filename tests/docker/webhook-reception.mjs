@@ -66,8 +66,10 @@ const envFile = join(directory, "test.env"),
   override = join(directory, "override.json");
 writeFileSync(
   envFile,
-  `PULSO_DOMAIN=pulso.localhost\nPULSO_PUBLIC_URL=https://webhooks.localhost:${httpsPort}\nPULSO_WEBHOOK_DOMAIN=webhooks.localhost\nPULSO_BIND_IP=127.0.0.1\nPULSO_HTTP_PORT=${httpPort}\nPULSO_HTTPS_PORT=${httpsPort}\nPULSO_DB_USER=pulso\nPULSO_DB_NAME=pulso_webhook_test\nINSTAGRAM_EXECUTION_ACCOUNT_ID=123\nINSTAGRAM_SEND_MODE=live\nINSTAGRAM_META_VALIDATED=true\nRESTIC_REPOSITORY=\n`,
+  `PULSO_DOMAIN=pulso.localhost\nPULSO_PUBLIC_URL=https://webhooks.localhost:${httpsPort}\nPULSO_WEBHOOK_DOMAIN=webhooks.localhost\nPULSO_BIND_IP=127.0.0.1\nPULSO_HTTP_PORT=${httpPort}\nPULSO_HTTPS_PORT=${httpsPort}\nPULSO_DB_USER=pulso\nPULSO_DB_NAME=pulso_webhook_test\nINSTAGRAM_EXECUTION_ACCOUNT_ID=123\nINSTAGRAM_SEND_MODE=live\nINSTAGRAM_META_VALIDATED=true\nINSTAGRAM_WEBHOOK_DIAGNOSTICS=true\nRESTIC_REPOSITORY=\n`,
 );
+// The logger cannot be enabled without a finite deadline (max. 24 hours).
+writeFileSync(envFile, `INSTAGRAM_WEBHOOK_DIAGNOSTICS_UNTIL=${Date.now() + 7200000}\n`, { flag: "a" });
 // Configuração externa tenta live; o overlay deve impor disabled independentemente dela.
 const secrets = {};
 for (const [name, value] of Object.entries({
@@ -138,7 +140,7 @@ let ca,
   started = false;
 async function probe(
   path,
-  { host = "webhooks.localhost", method = "GET", body, signature } = {},
+  { host = "webhooks.localhost", method = "GET", body, signature, legacySignature } = {},
 ) {
   return new Promise((ok, fail) => {
     const headers = { Host: host };
@@ -147,6 +149,7 @@ async function probe(
       headers["Content-Length"] = Buffer.byteLength(body);
     }
     if (signature) headers["X-Hub-Signature-256"] = signature;
+    if (legacySignature) headers["X-Hub-Signature"] = legacySignature;
     const req = request(
       {
         hostname: "127.0.0.1",
@@ -289,6 +292,13 @@ try {
   });
   const signature =
     "sha256=" + createHmac("sha256", appSecret).update(body).digest("hex");
+  for (const extra of [{}, { legacySignature: "sha1=fixture-must-stay-private" }, { signature: "sha256=fixture-invalid-format" }])
+    assert.equal((await probe("/api/webhooks/instagram", { method: "POST", body, ...extra })).status, 401);
+  const originalBytes = '{\r\n "object": "instagram", "entry": [], "fixture": "ação 🌊" \r\n}\n';
+  const originalSignature = "sha256=" + createHmac("sha256", appSecret).update(originalBytes).digest("hex");
+  const changedSerializationSignature = "sha256=" + createHmac("sha256", appSecret).update(JSON.stringify(JSON.parse(originalBytes))).digest("hex");
+  assert.equal((await probe("/api/webhooks/instagram", { method: "POST", body: originalBytes, signature: originalSignature })).status, 200);
+  assert.equal((await probe("/api/webhooks/instagram", { method: "POST", body: originalBytes, signature: changedSerializationSignature })).status, 401);
   assert.equal(
     (
       await probe("/api/webhooks/instagram", {
@@ -383,8 +393,15 @@ try {
     "1",
   );
   const logs = await compose("logs", "--no-color");
-  for (const value of privateValues)
+  for (const value of [...privateValues, signature, originalSignature, changedSerializationSignature, "sha1=fixture-must-stay-private", "sha256=fixture-invalid-format", "ação 🌊"])
     assert.equal(logs.includes(value), false, "Credencial de fixture nos logs");
+  const diagnostics = logs.split(/\r?\n/).filter((line) => line.includes('"event":"PULSO_WEBHOOK_SIGNATURE_DIAGNOSTIC"'))
+    .map((line) => JSON.parse(line.slice(line.indexOf('{"event":'))));
+  for (const outcome of ["MISSING_SIGNATURE", "INVALID_SIGNATURE_FORMAT", "HMAC_MISMATCH", "VALID_SIGNATURE"])
+    assert.ok(diagnostics.some((record) => record.result === outcome), `Diagnóstico ausente: ${outcome}`);
+  assert.ok(diagnostics.some((record) => record.legacySignaturePresent && !record.signature256Present));
+  for (const record of diagnostics)
+    assert.deepEqual(Object.keys(record).sort(), ["event", "at", "signature256Present", "signature256FormatValid", "legacySignaturePresent", "rawBodyRead", "result"].sort());
   console.log(
     "Recepção isolada passou: HTTPS verificado, desafio/HMAC, adulteração rejeitada, evento/fila duráveis sem duplicatas, painel/IP/portas bloqueados, sem worker, token ou saída de rede do web.",
   );
