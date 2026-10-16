@@ -1,6 +1,6 @@
 # Primeiro teste controlado: somente receber eventos
 
-Receptor de homologação publicado com autorização em 15/10/2026. **Somente o callback HTTPS está disponível; painel e envios reais permanecem bloqueados.** Nenhum dado local foi migrado. A verificação pela própria Meta e a inscrição da conta ainda estão pendentes. O teste de envio continua exigindo autorização própria com destinatário e textos definidos.
+Receptor de homologação publicado com autorização em 15/10/2026. **Somente o callback HTTPS está disponível; painel e envios reais permanecem bloqueados.** Nenhum dado local foi migrado. O proprietário confirmou a verificação do callback no painel da Meta, mas o teste POST de `comments` foi rejeitado com HTTP 401; a validação de assinatura de um evento da Meta e a inscrição da conta ainda estão pendentes. O teste de envio continua exigindo autorização própria com destinatário e textos definidos.
 
 ## Estado verificado na VPS — 15/10/2026
 
@@ -13,15 +13,27 @@ Receptor de homologação publicado com autorização em 15/10/2026. **Somente o
 - Site público `www.rendaextra.brunodallier.com.br` permaneceu HTTP 200 antes e depois da instalação.
 - Dump inicial próprio da homologação criado em diretório privado da VPS, em formato custom do PostgreSQL, com catálogo validado por `pg_restore --list` e SHA-256 registrado privadamente. Isso não constitui teste de restauração completo nem backup externo. O destino externo continua pendente antes da produção; o banco local e seu backup não foram transferidos.
 
-### Próxima etapa: configuração na Meta
+### Teste da Meta — 15/10/2026, horário de Brasília
+
+O proprietário informou sucesso no botão de teste de `comments` v26.0 às 21:42:42. O monitor registrou POSTs correlacionados às 21:42:43.969, 21:43:15.129 e 21:44:16.600, todos HTTP 401. **O teste não está aprovado pelo receptor**, independentemente da mensagem apresentada no painel.
+
+No código implantado, HTTP 401 significa cabeçalho `X-Hub-Signature-256` ausente/formato inválido ou HMAC divergente. Os logs não guardam cabeçalhos, assinaturas ou corpos e, portanto, não distinguem essas causas. Não concluir automaticamente que o segredo está errado; conferir o App Secret correspondente ao aplicativo/integração que enviou o teste é a próxima verificação necessária. A validação sobre os bytes originais do corpo permanece obrigatória.
+
+O banco de homologação continuou com zero eventos, tarefas e saídas. Caddy, web e PostgreSQL permaneceram saudáveis, com worker ausente, envios desabilitados e web sem token Instagram/saída de internet. Ausência de erro no monitor de saúde não transforma as respostas 401 em sucesso de autenticação.
+
+Uma sonda separada do próprio Pulso, às 21:44:31, enviou somente um envelope vazio, assinado em memória com o segredo local, e recebeu HTTP 200. O segredo local corresponde à cópia privada original da implantação. Isso demonstra que o receptor aceita o segredo configurado e o encaminhamento desse cabeçalho funciona para a sonda; **não comprova que a Meta utiliza o mesmo segredo ou que sua requisição contém o cabeçalho esperado**. Essa sonda não criou eventos e não é evidência de sucesso da Meta.
+
+Nova consulta de leitura da inscrição da conta retornou `NOT_SUBSCRIBED`, sem aplicativos listados. Nenhuma inscrição foi aplicada. Resolver a autenticação do webhook e repetir o teste antes de avançar à inscrição para eventos reais. O monitor temporário apenas lê Docker e contagens em transação SQL explicitamente read-only; encerra automaticamente e preserva o relatório, sem serviço permanente ou alteração de sudoers.
+
+### Configuração na Meta e próxima etapa
 
 No aplicativo correto, em Instagram → API setup with Instagram login → Webhooks, configurar:
 
 - Callback: `https://webhooks.pulso.brunodallier.com.br/api/webhooks/instagram`.
 - Verify token: valor privado de `INSTAGRAM_WEBHOOK_VERIFY_TOKEN` no `.env` local. Copiar diretamente para o site da Meta; nunca para o chat, Git, logs ou capturas.
-- Verificar e salvar o callback. Depois revisar os campos `comments`, `messages`, `messaging_postbacks`, `messaging_seen` e a inscrição da conta pelo procedimento autorizado abaixo.
+- A verificação GET foi confirmada pelo proprietário, assim como os campos `comments`, `messages`, `messaging_postbacks` marcados como assinados. `messaging_seen` não foi confirmado. Esses campos no aplicativo são distintos da inscrição da conta.
 
-A consulta de leitura `npm run instagram:webhooks:check` ainda retornou `NOT_SUBSCRIBED`. O desafio e o HMAC executados por nós não comprovam verificação pela Meta nem entrega de evento real. Primeiro confirmar o callback no aplicativo; depois aplicar e conferir a inscrição da conta. A conta/testador, permissões e modo do aplicativo precisam permitir o teste. Um comentário controlado deverá comprovar evento autêntico persistido na homologação, sem executar a fila ou habilitar envios.
+A consulta de leitura `npm run instagram:webhooks:check` ainda retornou `NOT_SUBSCRIBED`. Primeiro resolver o HTTP 401 do teste da Meta, conferindo privadamente o App Secret do mesmo aplicativo/integração testado; depois repetir a validação e revisar a inscrição da conta. Não publicar o aplicativo, alterar seu modo ou aplicar inscrições para contornar uma falha de assinatura. A conta/testador, permissões e modo do aplicativo ainda precisam ser conferidos para eventos reais. Um comentário controlado deverá comprovar evento autêntico persistido na homologação, sem executar a fila ou habilitar envios. Um exemplo do painel com IDs fictícios pode ser autenticado e ignorado pelo vínculo da conta; isso deve ser distinguido de uma falha de assinatura.
 
 ## Histórico da preparação anterior à publicação
 
